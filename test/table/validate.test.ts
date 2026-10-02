@@ -73,4 +73,66 @@ describe("validateTable", () => {
     });
     expect(validateTable(t).length).toBeGreaterThanOrEqual(2);
   });
+
+  describe("flippers", () => {
+    it("rejects a duplicate flipper id", () => {
+      const t = patched((x) => x.flippers.push({ ...x.flippers[0]! }));
+      expect(validateTable(t).join("\n")).toMatch(/flipper "left".*(twice|duplicate|more than once|used by)/i);
+    });
+
+    it("rejects an unknown material", () => {
+      const t = patched((x) => void (x.flippers[0]!.material = "glass"));
+      expect(validateTable(t).join("\n")).toMatch(/flipper "left".*material "glass"/);
+    });
+
+    it("rejects a flipper whose end radii leave no straight side", () => {
+      const t = patched((x) => void ((x.flippers[0]!.length = 10), (x.flippers[0]!.rBase = 14), (x.flippers[0]!.rTip = 2)));
+      expect(validateTable(t).join("\n")).toMatch(/flipper "left".*length/);
+    });
+
+    it("rejects equal rest and active angles", () => {
+      const t = patched((x) => void (x.flippers[0]!.activeDeg = x.flippers[0]!.restDeg));
+      expect(validateTable(t).join("\n")).toMatch(/flipper "left".*angle/);
+    });
+
+    it("rejects a swing so fast the tip would skip past a ball in one tick", () => {
+      const t = patched((x) => void ((x.flippers[0]!.upMs = 1), (x.flippers[0]!.downMs = 1)));
+      expect(validateTable(t).join("\n")).toMatch(/flipper "left".*(fast|speed)/);
+    });
+
+    it("rejects a pivot outside the playfield", () => {
+      const t = patched((x) => void (x.flippers[0]!.pivot = [9999, 10]));
+      expect(validateTable(t).join("\n")).toMatch(/flipper "left".*outside the playfield/);
+    });
+  });
+
+  describe("plunger", () => {
+    const withPlunger = (patch: (p: NonNullable<TableDef["plunger"]>) => void) => patched((x) => patch(x.plunger!));
+
+    it("rejects an unknown material", () => {
+      expect(validateTable(withPlunger((p) => void (p.material = "glass"))).join("\n")).toMatch(/plunger.*material "glass"/);
+    });
+
+    it("rejects non-positive size and speeds", () => {
+      for (const field of ["width", "stroke", "maxSpeed", "pullSpeed"] as const) {
+        const t = withPlunger((p) => void (p[field] = 0));
+        expect(validateTable(t).join("\n"), field).toMatch(new RegExp(`plunger.*${field}`));
+      }
+    });
+
+    it("rejects a release so fast the face could skip past a ball in one tick", () => {
+      const t = withPlunger((p) => void (p.maxSpeed = 40));
+      expect(validateTable(t).join("\n")).toMatch(/plunger.*(fast|speed)/);
+    });
+
+    it("rejects a plunger outside the playfield", () => {
+      const t = withPlunger((p) => void (p.at = [9999, 10]));
+      expect(validateTable(t).join("\n")).toMatch(/plunger.*outside the playfield/);
+    });
+
+    it("accepts a table without a plunger", () => {
+      const t = patched((x) => void delete x.plunger);
+      expect(validateTable(t)).toEqual([]);
+    });
+  });
 });

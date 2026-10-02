@@ -1,4 +1,9 @@
+import { advanceFlipper } from "./flipper";
 import { collect } from "./grid";
+import { hitFlipper, pushOutFlipper } from "./flipper";
+import { advancePlunger, hitPlunger } from "./plunger";
+import { hitCircle, setHit } from "./sweep";
+import type { Hit } from "./sweep";
 import type { Ball, World } from "./types";
 
 /** The fixed physics step in seconds. Part of the replay header. */
@@ -11,35 +16,6 @@ const MAX_PASSES = 4;
 
 // Determinism: only + - * / and Math.sqrt (correctly rounded) in this file. No
 // sin, cos, pow or atan2, and colliders are visited in array order.
-
-interface Hit {
-  t: number;
-  nx: number;
-  ny: number;
-  e: number;
-  mu: number;
-  sw: number;
-}
-
-/** Earliest time in [0, rem] the ball centre reaches distance R from point C. */
-function hitCircle(b: Ball, cx: number, cy: number, R: number, rem: number): number {
-  const dx = b.x - cx;
-  const dy = b.y - cy;
-  const bb = dx * b.vx + dy * b.vy; // half of the linear term
-  if (bb >= 0) return Infinity; // moving away or tangent
-  const a = b.vx * b.vx + b.vy * b.vy;
-  const c = dx * dx + dy * dy - R * R;
-  if (c <= 0) return 0; // already touching or inside, and approaching
-  const disc = bb * bb - a * c;
-  if (disc < 0) return Infinity;
-  const t = (-bb - Math.sqrt(disc)) / a;
-  return t >= 0 && t <= rem ? t : Infinity;
-}
-
-function setHit(best: Hit | null, t: number, nx: number, ny: number, e: number, mu: number, sw: number): Hit {
-  if (best && best.t <= t) return best;
-  return { t, nx, ny, e, mu, sw };
-}
 
 function earliest(w: World, b: Ball, rem: number): Hit | null {
   let best: Hit | null = null;
@@ -100,12 +76,14 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
       best = setHit(best, t, px / pl, py / pl, s.e, s.mu, s.sw);
     }
   }
+  for (const f of w.flippers) best = hitFlipper(f, b, rem, best);
+  if (w.plunger) best = hitPlunger(w.plunger, b, rem, best);
   return best;
 }
 
 /** Impulse against a static surface with normal (nx, ny) pointing at the ball. */
 function respond(b: Ball, h: Hit): number {
-  const vn = b.vx * h.nx + b.vy * h.ny;
+  const vn = (b.vx - h.vsx) * h.nx + (b.vy - h.vsy) * h.ny;
   if (vn >= 0) return 0;
   const e = -vn < REST_SPEED ? 0 : h.e;
   const jn = -(1 + e) * vn * b.m;
@@ -116,7 +94,7 @@ function respond(b: Ball, h: Hit): number {
     // slip speed of the contact point along the tangent; ball is a solid sphere
     const tx = -h.ny;
     const ty = h.nx;
-    const vt = b.vx * tx + b.vy * ty;
+    const vt = (b.vx - h.vsx) * tx + (b.vy - h.vsy) * ty;
     const slip = vt - b.w * b.r;
     const inertia = 0.4 * b.m * b.r * b.r;
     let jt = -slip / (1 / b.m + (b.r * b.r) / inertia);
@@ -133,8 +111,14 @@ function respond(b: Ball, h: Hit): number {
 export function step(w: World): void {
   const out = w.contacts;
   out.n = 0;
+  // A flipper moves a few millimetres per tick at most (validateTable enforces
+  // it stays under the ball radius), so it is advanced once and treated as static
+  // at that pose while the ball is swept; its surface velocity enters the response.
+  for (const f of w.flippers) advanceFlipper(f, DT);
+  if (w.plunger) advancePlunger(w.plunger, DT);
   for (let bi = 0; bi < w.balls.length; bi++) {
     const b = w.balls[bi]!;
+    for (const f of w.flippers) pushOutFlipper(f, b);
     b.vy += w.gravity * DT;
     b.vx *= 1 - w.drag * DT;
     b.vy *= 1 - w.drag * DT;
@@ -151,11 +135,11 @@ export function step(w: World): void {
       b.y += b.vy * hit.t;
       const jn = respond(b, hit);
       if (hit.sw > 0 && jn > 0 && out.n < out.sw.length) {
-        const k = out.n++;
-        out.tick[k] = w.tick;
-        out.ball[k] = bi;
-        out.sw[k] = hit.sw;
-        out.impulse[k] = jn;
+        const c = out.n++;
+        out.tick[c] = w.tick;
+        out.ball[c] = bi;
+        out.sw[c] = hit.sw;
+        out.impulse[c] = jn;
       }
       rem -= hit.t;
       if (rem <= 0) break;

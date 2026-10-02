@@ -54,6 +54,38 @@ export interface PostDef {
   shared?: boolean;
 }
 
+export interface FlipperDef {
+  id: string;
+  /** Pivot centre. */
+  pivot: Point;
+  length: number;
+  /** Radius at the pivot and at the tip. */
+  rBase: number;
+  rTip: number;
+  /** Axis angle at rest and when raised, degrees, in the table plane (x right, y down). */
+  restDeg: number;
+  activeDeg: number;
+  /** Swing time rest -> raised, and back, milliseconds. */
+  upMs: number;
+  downMs: number;
+  material: string;
+}
+
+export interface PlungerDef {
+  /** Centre of the plunger face at rest. */
+  at: Point;
+  /** Launch direction in degrees in the table plane (x right, y down); up the table is -90. */
+  dirDeg: number;
+  /** Face width, mm. */
+  width: number;
+  /** How far it can be pulled back, mm. */
+  stroke: number;
+  /** Forward speed after a full pull, and speed of pulling back, m/s. */
+  maxSpeed: number;
+  pullSpeed: number;
+  material: string;
+}
+
 export interface TableDef {
   id: string;
   name: string;
@@ -62,6 +94,8 @@ export interface TableDef {
   materials: Record<string, Material>;
   walls: WallDef[];
   posts: PostDef[];
+  flippers: FlipperDef[];
+  plunger?: PlungerDef;
   /** Named shots: ordered lists of switch names the rules treat as one shot. */
   shots: Record<string, string[]>;
 }
