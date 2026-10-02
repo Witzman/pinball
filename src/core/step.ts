@@ -1,3 +1,4 @@
+import { collect } from "./grid";
 import type { Ball, World } from "./types";
 
 /** The fixed physics step in seconds. Part of the replay header. */
@@ -42,8 +43,27 @@ function setHit(best: Hit | null, t: number, nx: number, ny: number, e: number, 
 function earliest(w: World, b: Ball, rem: number): Hit | null {
   let best: Hit | null = null;
   const zoneBit = 1 << b.zone;
+  const reach = b.r + 1e-6;
+  const ex = b.x + b.vx * rem;
+  const ey = b.y + b.vy * rem;
+  const g = w.grid;
+  const n = collect(g, Math.min(b.x, ex) - reach, Math.min(b.y, ey) - reach, Math.max(b.x, ex) + reach, Math.max(b.y, ey) + reach);
+  const nSeg = w.segments.length;
 
-  for (const s of w.segments) {
+  for (let k = 0; k < n; k++) {
+    const idx = g.cand[k]!;
+    if (idx >= nSeg) {
+      const c = w.circles[idx - nSeg]!;
+      if ((c.zoneMask & zoneBit) === 0) continue;
+      const t = hitCircle(b, c.x, c.y, b.r + c.r, rem);
+      if (t === Infinity) continue;
+      const px = b.x + b.vx * t - c.x;
+      const py = b.y + b.vy * t - c.y;
+      const pl = Math.sqrt(px * px + py * py);
+      best = setHit(best, t, px / pl, py / pl, c.e, c.mu);
+      continue;
+    }
+    const s = w.segments[idx]!;
     if ((s.zoneMask & zoneBit) === 0) continue;
     const abx = s.bx - s.ax;
     const aby = s.by - s.ay;
@@ -68,9 +88,9 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
         if (u >= 0 && u <= 1) best = setHit(best, t, nx, ny, s.e, s.mu);
       }
     }
-    for (let k = 0; k < 2; k++) {
-      const cx = k === 0 ? s.ax : s.bx;
-      const cy = k === 0 ? s.ay : s.by;
+    for (let e = 0; e < 2; e++) {
+      const cx = e === 0 ? s.ax : s.bx;
+      const cy = e === 0 ? s.ay : s.by;
       const t = hitCircle(b, cx, cy, b.r, rem);
       if (t === Infinity) continue;
       const px = b.x + b.vx * t - cx;
@@ -78,16 +98,6 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
       const pl = Math.sqrt(px * px + py * py);
       best = setHit(best, t, px / pl, py / pl, s.e, s.mu);
     }
-  }
-
-  for (const c of w.circles) {
-    if ((c.zoneMask & zoneBit) === 0) continue;
-    const t = hitCircle(b, c.x, c.y, b.r + c.r, rem);
-    if (t === Infinity) continue;
-    const px = b.x + b.vx * t - c.x;
-    const py = b.y + b.vy * t - c.y;
-    const pl = Math.sqrt(px * px + py * py);
-    best = setHit(best, t, px / pl, py / pl, c.e, c.mu);
   }
   return best;
 }
@@ -121,6 +131,9 @@ function respond(b: Ball, h: Hit): void {
 export function step(w: World): void {
   for (const b of w.balls) {
     b.vy += w.gravity * DT;
+    b.vx *= 1 - w.drag * DT;
+    b.vy *= 1 - w.drag * DT;
+    b.w *= 1 - w.spinDamping * DT;
     let rem = DT;
     for (let pass = 0; pass < MAX_PASSES; pass++) {
       const hit = earliest(w, b, rem);
