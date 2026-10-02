@@ -1,0 +1,7 @@
+# Prozessunterlagen gehören nie hierher. Der hygiene-Job lässt einen Build
+# scheitern, der eine davon einschleppt.
+notes/
+.env
+__pycache__/
+*.pyc
+node_modules/
