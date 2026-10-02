@@ -39,6 +39,74 @@ export interface Circle {
   sw: number;
 }
 
+/**
+ * A flipper: a tapered capsule (radius r0 at the pivot, r1 at the tip) that
+ * swings between two angles. Kinematic: balls move it never. The pose follows
+ * the swing progress `u` (0 rest, 1 raised) through a table built at load, so
+ * the step needs no trigonometry.
+ */
+export interface Flipper {
+  px: number;
+  py: number;
+  length: number;
+  r0: number;
+  r1: number;
+  /** (r0 - r1) / length, and sqrt(1 - k^2): the side lines' tilt. Constant. */
+  k: number;
+  cs: number;
+  /** Length of a side line between its tangent points. Constant. */
+  tlen: number;
+  theta0: number;
+  theta1: number;
+  /** cos and sin of the angle at u = i / (N - 1) for i = 0..N-1. */
+  cosT: Float64Array;
+  sinT: Float64Array;
+  /** Swing progress 0..1. */
+  u: number;
+  /** Button held. */
+  on: boolean;
+  /** Swing speeds in u per second. */
+  upRate: number;
+  downRate: number;
+  e: number;
+  mu: number;
+  /** Current axis (unit), tip position and angular velocity (rad/s). Derived from u. */
+  dx: number;
+  dy: number;
+  tx: number;
+  ty: number;
+  omega: number;
+}
+
+/**
+ * A spring plunger: a flat face that is pulled back along its axis and flies
+ * forward when released, launching a ball resting on it.
+ */
+export interface Plunger {
+  /** Face centre at rest. */
+  x: number;
+  y: number;
+  /** Unit launch direction. */
+  dirx: number;
+  diry: number;
+  halfWidth: number;
+  stroke: number;
+  /** Forward speed after a full pull, m/s. */
+  maxSpeed: number;
+  /** Speed of pulling back, m/s. */
+  pullSpeed: number;
+  e: number;
+  mu: number;
+  /** How far the face is pulled back, 0..stroke. */
+  pos: number;
+  /** Forward velocity of the face along the launch direction. */
+  vel: number;
+  /** Wanted pull 0..1, set by the input layer. */
+  pull: number;
+  /** Forward speed of the current release. */
+  releaseV: number;
+}
+
 /** Hits on colliders that carry a switch, in the order they happened. Cleared every step. */
 export interface ContactBuffer {
   n: number;
@@ -69,6 +137,8 @@ export interface World {
   balls: Ball[];
   segments: Segment[];
   circles: Circle[];
+  flippers: Flipper[];
+  plunger: Plunger | null;
   /** Effective gravity along +y, m/s^2 (already projected for the slope). */
   gravity: number;
   /** Rolling drag, 1/s: speed decays as exp(-drag t). 0 = none. */

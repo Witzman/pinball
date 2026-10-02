@@ -1,10 +1,12 @@
-import { createWorld, slopeGravity } from "../core/world";
+import { createWorld, makeFlipper, makePlunger, slopeGravity } from "../core/world";
 import type { Ball, Circle, Segment, World } from "../core/types";
 import type { Point, TableDef } from "./schema";
 import { validateTable } from "./validate";
 
 export interface LoadedTable {
   world: World;
+  /** Flipper ids in the order of world.flippers. */
+  flipperIds: string[];
   /** Switch names; a collider's `sw` is the 1-based index into this list. */
   switchNames: string[];
   ballRadius: number;
@@ -64,8 +66,27 @@ export function loadTable(def: TableDef): LoadedTable {
     circles.push({ x: p.at[0] * MM, y: p.at[1] * MM, r: p.r * MM, e: mat.e, mu: mat.mu, zoneMask: zoneMask(p.zones), sw: swId(p.switch) });
   }
 
-  const world = createWorld({ balls: [], segments, circles, gravity: slopeGravity(def.playfield.slopeDeg) });
-  return { world, switchNames, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM };
+  const flippers = def.flippers.map((f) => {
+    const mat = def.materials[f.material]!;
+    return makeFlipper({
+      px: f.pivot[0] * MM, py: f.pivot[1] * MM, length: f.length * MM, r0: f.rBase * MM, r1: f.rTip * MM,
+      restRad: (f.restDeg * Math.PI) / 180, activeRad: (f.activeDeg * Math.PI) / 180,
+      upTime: f.upMs / 1000, downTime: f.downMs / 1000, e: mat.e, mu: mat.mu,
+    });
+  });
+
+  const pl = def.plunger;
+  const plunger = pl
+    ? makePlunger({
+        x: pl.at[0] * MM, y: pl.at[1] * MM,
+        dirx: Math.cos((pl.dirDeg * Math.PI) / 180), diry: Math.sin((pl.dirDeg * Math.PI) / 180),
+        halfWidth: (pl.width * MM) / 2, stroke: pl.stroke * MM, maxSpeed: pl.maxSpeed, pullSpeed: pl.pullSpeed,
+        e: def.materials[pl.material]?.e ?? 0, mu: def.materials[pl.material]?.mu ?? 0,
+      })
+    : null;
+
+  const world = createWorld({ balls: [], segments, circles, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg) });
+  return { world, flipperIds: def.flippers.map((f) => f.id), switchNames, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM };
 }
 
 /** A resting ball at (x, y) millimetres on the playfield. */
