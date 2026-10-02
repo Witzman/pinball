@@ -9,7 +9,8 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "budget": "node tools/check_budget.mjs"
+    "budget": "node tools/check_budget.mjs",
+    "bench": "vitest run test/core/perf.test.ts --disable-console-intercept"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
