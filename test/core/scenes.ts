@@ -17,7 +17,7 @@ export function crowded(n: number, seed = 7): World {
     const y = rnd() * 1.0;
     segments.push(wall(x, y, x + 0.03, y + 0.02 * (rnd() - 0.5)));
   }
-  const circles = [0, 1, 2, 3].map(() => ({ x: 0.05 + rnd() * 0.4, y: 0.05 + rnd() * 0.9, r: 0.012, e: 0.7, mu: 0.1, zoneMask: 1 }));
+  const circles = [0, 1, 2, 3].map(() => ({ x: 0.05 + rnd() * 0.4, y: 0.05 + rnd() * 0.9, r: 0.012, e: 0.7, mu: 0.1, zoneMask: 1, sw: 0 }));
   return createWorld({
     balls: [ball({ x: 0.26, y: 0.1, vx: 1, vy: 1 }), ball({ x: 0.3, y: 0.2, vx: -1, vy: 0.5 }), ball({ x: 0.2, y: 0.3, vx: 0.5, vy: -1 })],
     segments,

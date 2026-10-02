@@ -18,6 +18,7 @@ interface Hit {
   ny: number;
   e: number;
   mu: number;
+  sw: number;
 }
 
 /** Earliest time in [0, rem] the ball centre reaches distance R from point C. */
@@ -35,9 +36,9 @@ function hitCircle(b: Ball, cx: number, cy: number, R: number, rem: number): num
   return t >= 0 && t <= rem ? t : Infinity;
 }
 
-function setHit(best: Hit | null, t: number, nx: number, ny: number, e: number, mu: number): Hit {
+function setHit(best: Hit | null, t: number, nx: number, ny: number, e: number, mu: number, sw: number): Hit {
   if (best && best.t <= t) return best;
-  return { t, nx, ny, e, mu };
+  return { t, nx, ny, e, mu, sw };
 }
 
 function earliest(w: World, b: Ball, rem: number): Hit | null {
@@ -60,7 +61,7 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
       const px = b.x + b.vx * t - c.x;
       const py = b.y + b.vy * t - c.y;
       const pl = Math.sqrt(px * px + py * py);
-      best = setHit(best, t, px / pl, py / pl, c.e, c.mu);
+      best = setHit(best, t, px / pl, py / pl, c.e, c.mu, c.sw);
       continue;
     }
     const s = w.segments[idx]!;
@@ -85,7 +86,7 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
         const px = b.x + b.vx * t - s.ax;
         const py = b.y + b.vy * t - s.ay;
         const u = (px * abx + py * aby) / len2;
-        if (u >= 0 && u <= 1) best = setHit(best, t, nx, ny, s.e, s.mu);
+        if (u >= 0 && u <= 1) best = setHit(best, t, nx, ny, s.e, s.mu, s.sw);
       }
     }
     for (let e = 0; e < 2; e++) {
@@ -96,16 +97,16 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
       const px = b.x + b.vx * t - cx;
       const py = b.y + b.vy * t - cy;
       const pl = Math.sqrt(px * px + py * py);
-      best = setHit(best, t, px / pl, py / pl, s.e, s.mu);
+      best = setHit(best, t, px / pl, py / pl, s.e, s.mu, s.sw);
     }
   }
   return best;
 }
 
 /** Impulse against a static surface with normal (nx, ny) pointing at the ball. */
-function respond(b: Ball, h: Hit): void {
+function respond(b: Ball, h: Hit): number {
   const vn = b.vx * h.nx + b.vy * h.ny;
-  if (vn >= 0) return;
+  if (vn >= 0) return 0;
   const e = -vn < REST_SPEED ? 0 : h.e;
   const jn = -(1 + e) * vn * b.m;
   b.vx += (jn * h.nx) / b.m;
@@ -126,10 +127,14 @@ function respond(b: Ball, h: Hit): void {
     b.vy += (jt * ty) / b.m;
     b.w -= (b.r * jt) / inertia;
   }
+  return jn;
 }
 
 export function step(w: World): void {
-  for (const b of w.balls) {
+  const out = w.contacts;
+  out.n = 0;
+  for (let bi = 0; bi < w.balls.length; bi++) {
+    const b = w.balls[bi]!;
     b.vy += w.gravity * DT;
     b.vx *= 1 - w.drag * DT;
     b.vy *= 1 - w.drag * DT;
@@ -144,7 +149,14 @@ export function step(w: World): void {
       }
       b.x += b.vx * hit.t;
       b.y += b.vy * hit.t;
-      respond(b, hit);
+      const jn = respond(b, hit);
+      if (hit.sw > 0 && jn > 0 && out.n < out.sw.length) {
+        const k = out.n++;
+        out.tick[k] = w.tick;
+        out.ball[k] = bi;
+        out.sw[k] = hit.sw;
+        out.impulse[k] = jn;
+      }
       rem -= hit.t;
       if (rem <= 0) break;
     }
