@@ -19,6 +19,8 @@ export const demoTable: TableDef = {
     { type: "arc", c: [260, 260], r: 240, from: 200, to: 340, chords: 24, material: "metal" },
     // plunger lane, open at the top
     { type: "segment", a: [483, 1045], b: [483, 250], material: "metal" },
+    // deflector at the top of the lane: steers the ball left, into the playfield
+    { type: "segment", a: [420, 30], b: [515, 125], material: "metal" },
     // a standup target
     { type: "segment", a: [300, 500], b: [380, 500], material: "rubber", switch: "target1" },
   ],
@@ -26,7 +28,7 @@ export const demoTable: TableDef = {
     { at: [200, 400], r: 12, material: "rubber" },
     { at: [320, 420], r: 12, material: "rubber" },
   ],
-  plunger: { at: [499, 1030], dirDeg: -90, width: 32, stroke: 80, maxSpeed: 5, pullSpeed: 0.4, material: "plunger" },
+  plunger: { at: [499, 1030], dirDeg: -90, width: 32, stroke: 80, maxSpeed: 5, pullSpeed: 0.2, material: "plunger" },
   flippers: [
     { id: "left", pivot: [150, 900], length: 60, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber" },
     { id: "right", pivot: [370, 900], length: 60, rBase: 9.5, rTip: 5, restDeg: 150, activeDeg: 210, upMs: 40, downMs: 100, material: "rubber" },

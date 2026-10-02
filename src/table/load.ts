@@ -9,6 +9,9 @@ export interface LoadedTable {
   flipperIds: string[];
   /** Switch names; a collider's `sw` is the 1-based index into this list. */
   switchNames: string[];
+  /** Playfield size, metres. */
+  playfieldWidth: number;
+  playfieldLength: number;
   ballRadius: number;
   ballMass: number;
 }
@@ -86,7 +89,7 @@ export function loadTable(def: TableDef): LoadedTable {
     : null;
 
   const world = createWorld({ balls: [], segments, circles, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg) });
-  return { world, flipperIds: def.flippers.map((f) => f.id), switchNames, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM };
+  return { world, flipperIds: def.flippers.map((f) => f.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM };
 }
 
 /** A resting ball at (x, y) millimetres on the playfield. */

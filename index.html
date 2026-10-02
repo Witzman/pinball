@@ -2,11 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <title>Pinball</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0d14; overflow: hidden; }
+      canvas { display: block; width: 100vw; height: 100vh; touch-action: none; user-select: none; -webkit-user-select: none; }
+      #banner { position: fixed; inset: 0; display: grid; place-items: center; color: #e8e8f0; font: 600 2rem system-ui, sans-serif; background: rgba(11, 13, 20, 0.6); pointer-events: none; }
+      #banner[hidden] { display: none; }
+    </style>
   </head>
   <body>
     <canvas id="table"></canvas>
-    <script type="module" src="./src/main.ts"></script>
+    <div id="banner" hidden>Paused (P)</div>
+    <script type="module" src="./src/app/main.ts"></script>
   </body>
 </html>

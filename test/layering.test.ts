@@ -9,6 +9,9 @@ const ALLOWED: Record<string, string[]> = {
   core: ["core"],
   table: ["core", "table"],
   tables: ["table", "tables"],
+  sim: ["core", "table", "sim"],
+  input: ["input", "sim"],
+  render: ["core", "table", "sim", "render"],
 };
 
 const root = fileURLToPath(new URL("../src", import.meta.url));
@@ -36,9 +39,9 @@ describe("layering", () => {
         }
       });
 
-      if (layer === "table" || layer === "tables") {
+      if (["table", "tables", "sim", "input", "render"].includes(layer)) {
         it(`${rel} touches no DOM, clock or randomness`, () => {
-          expect(code).not.toMatch(/\b(document|window|navigator|performance)\b/);
+          if (layer !== "render") expect(code).not.toMatch(/\b(document|window|navigator|performance)\b/);
           expect(code).not.toMatch(/Date\.now|Math\.random/);
         });
       }

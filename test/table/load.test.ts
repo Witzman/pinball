@@ -16,6 +16,12 @@ describe("loadTable", () => {
     expect(post.r).toBeCloseTo(demoTable.posts[0]!.r / 1000, 12);
   });
 
+  it("reports the playfield size in metres", () => {
+    const t = loadTable(demoTable);
+    expect(t.playfieldWidth).toBeCloseTo(demoTable.playfield.width / 1000, 12);
+    expect(t.playfieldLength).toBeCloseTo(demoTable.playfield.length / 1000, 12);
+  });
+
   it("uses the slope of the table for gravity", () => {
     const t = loadTable(demoTable);
     expect(t.world.gravity).toBeCloseTo(slopeGravity(demoTable.playfield.slopeDeg), 12);
@@ -140,5 +146,43 @@ describe("loadTable", () => {
     }
     expect(highest).toBeLessThan(0.3);
     expect(b.x).toBeGreaterThan(0.48);
+  });
+
+  it("steers a launched ball out of the lane into the playfield", () => {
+    const t = loadTable(demoTable);
+    const p = t.world.plunger!;
+    const def = demoTable.plunger!;
+    const b = makeBall(t, def.at[0], def.at[1] - demoTable.ball.radius - 0.01);
+    t.world.balls.push(b);
+    for (let i = 0; i < 300; i++) step(t.world);
+    p.pull = 1;
+    for (let i = 0; i < 700; i++) step(t.world);
+    p.pull = 0;
+    let leftTheLane = false;
+    for (let i = 0; i < 4000 && !leftTheLane; i++) {
+      step(t.world);
+      leftTheLane = b.x < 0.45 && b.y < 0.6;
+    }
+    expect(leftTheLane).toBe(true);
+  });
+
+  it("delivers a launched ball into the playfield towards the flippers, for light and hard launches", () => {
+    for (const pull of [0.5, 0.75, 1]) {
+      const t = loadTable(demoTable);
+      const p = t.world.plunger!;
+      const def = demoTable.plunger!;
+      const b = makeBall(t, def.at[0], def.at[1] - demoTable.ball.radius - 0.01);
+      t.world.balls.push(b);
+      for (let i = 0; i < 300; i++) step(t.world);
+      p.pull = pull;
+      for (let i = 0; i < 700; i++) step(t.world);
+      p.pull = 0;
+      let reached = false;
+      for (let i = 0; i < 8000 && !reached; i++) {
+        step(t.world);
+        reached = b.y > 0.7 && b.x < 0.47;
+      }
+      expect(reached, `pull ${pull}`).toBe(true);
+    }
   });
 });
