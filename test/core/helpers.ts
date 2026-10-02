@@ -8,7 +8,7 @@ export function ball(over: Partial<Ball> = {}): Ball {
 }
 
 export function wall(ax: number, ay: number, bx: number, by: number, over: Partial<Segment> = {}): Segment {
-  return { ax, ay, bx, by, e: 0.5, mu: 0, zoneMask: 1, ...over };
+  return { ax, ay, bx, by, e: 0.5, mu: 0, zoneMask: 1, sw: 0, ...over };
 }
 
 export function world(balls: Ball[], segments: Segment[] = [], gravity = 0): World {

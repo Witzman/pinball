@@ -11,7 +11,7 @@ function ids(g: ReturnType<typeof buildGrid>, x0: number, y0: number, x1: number
 
 describe("grid broadphase", () => {
   const segs: Segment[] = [wall(0, 0, 1, 0), wall(5, 5, 5.1, 5.1), wall(2, 0, 2, 10)];
-  const circles: Circle[] = [{ x: 3, y: 3, r: 0.1, e: 0.5, mu: 0, zoneMask: 1 }];
+  const circles: Circle[] = [{ x: 3, y: 3, r: 0.1, e: 0.5, mu: 0, zoneMask: 1, sw: 0 }];
 
   it("returns colliders near the query box and not far ones", () => {
     const g = buildGrid(segs, circles, 0.5);

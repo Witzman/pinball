@@ -51,7 +51,7 @@ describe("circle colliders", () => {
     const w = createWorld({
       balls: [ball({ x: -0.1, y: 0.005, vx: 3 })],
       segments: [],
-      circles: [{ x: 0, y: 0, r: 0.01, e: 0.6, mu: 0, zoneMask: 1 }],
+      circles: [{ x: 0, y: 0, r: 0.01, e: 0.6, mu: 0, zoneMask: 1, sw: 0 }],
       gravity: 0,
     });
     run(w, 100);
