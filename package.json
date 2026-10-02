@@ -12,6 +12,7 @@
     "budget": "node tools/check_budget.mjs"
   },
   "devDependencies": {
+    "@types/node": "^20.19.43",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
     "vitest": "^4.1.11"
