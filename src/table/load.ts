@@ -1,5 +1,5 @@
 import { createWorld, makeFlipper, makePlunger, slopeGravity } from "../core/world";
-import type { Ball, Circle, Gate, Segment, Trigger, World } from "../core/types";
+import type { Ball, Circle, Gate, Magnet, Segment, Trigger, World } from "../core/types";
 import type { Point, TableDef } from "./schema";
 import { validateTable } from "./validate";
 
@@ -9,6 +9,8 @@ export interface LoadedTable {
   flipperIds: string[];
   /** Trigger ids in the order of world.triggers. */
   triggerIds: string[];
+  /** Magnet ids in the order of world.magnets. */
+  magnetIds: string[];
   /** Switch names; a collider's `sw` is the 1-based index into this list. */
   switchNames: string[];
   /** Playfield size, metres. */
@@ -83,6 +85,10 @@ export function loadTable(def: TableDef): LoadedTable {
     };
   });
 
+  const magnets: Magnet[] = (def.magnets ?? []).map((m) => ({
+    x: m.at[0] * MM, y: m.at[1] * MM, r: m.r * MM, strength: m.strength, zoneMask: zoneMask(m.zones), on: false,
+  }));
+
   const flippers = def.flippers.map((f) => {
     const mat = def.materials[f.material]!;
     return makeFlipper({
@@ -102,8 +108,8 @@ export function loadTable(def: TableDef): LoadedTable {
       })
     : null;
 
-  const world = createWorld({ balls: [], segments, circles, gates, triggers, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg) });
-  return { world, flipperIds: def.flippers.map((f) => f.id), triggerIds: (def.triggers ?? []).map((t) => t.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM };
+  const world = createWorld({ balls: [], segments, circles, gates, triggers, magnets, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg) });
+  return { world, flipperIds: def.flippers.map((f) => f.id), triggerIds: (def.triggers ?? []).map((t) => t.id), magnetIds: (def.magnets ?? []).map((m) => m.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM };
 }
 
 /** A resting ball at (x, y) millimetres on the playfield. */

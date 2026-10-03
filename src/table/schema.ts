@@ -95,6 +95,20 @@ export interface TriggerDef {
   hold?: { kickDeg: number; kickSpeed: number };
 }
 
+/**
+ * A magnet the rules switch on and off by id. While on, a ball within `r` of the
+ * centre is pulled towards it, strongest at the centre (`strength` in m/s^2, the
+ * table's gravity along the slope is about 1.1) and fading linearly to nothing at `r`.
+ */
+export interface MagnetDef {
+  id: string;
+  at: Point;
+  r: number;
+  strength: number;
+  /** Heights this magnet reaches; default [0]. */
+  zones?: number[];
+}
+
 export interface FlipperDef {
   id: string;
   /** Pivot centre. */
@@ -137,6 +151,7 @@ export interface TableDef {
   posts: PostDef[];
   gates?: GateDef[];
   triggers?: TriggerDef[];
+  magnets?: MagnetDef[];
   flippers: FlipperDef[];
   plunger?: PlungerDef;
   /** Named shots: ordered lists of switch names the rules treat as one shot. */
