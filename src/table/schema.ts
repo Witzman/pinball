@@ -76,6 +76,25 @@ export interface GateDef {
   shared?: boolean;
 }
 
+/**
+ * A round area on the playfield: a rollover, lane or sinkhole. A ball whose
+ * centre enters it is reported on `switch`. With `hold` it is a sinkhole: the
+ * ball is captured at the centre and stays until the rules kick it out.
+ */
+export interface TriggerDef {
+  /** Unique name; the rules address a sinkhole by it. */
+  id: string;
+  at: Point;
+  r: number;
+  /** Heights this trigger exists in; default [0]. */
+  zones?: number[];
+  /** Reported on every entry (capture, for a sinkhole). Required: the event is the point. */
+  switch: string;
+  shared?: boolean;
+  /** Makes it a sinkhole. Direction in degrees in the table plane (x right, y down; up the table is -90), speed in m/s. */
+  hold?: { kickDeg: number; kickSpeed: number };
+}
+
 export interface FlipperDef {
   id: string;
   /** Pivot centre. */
@@ -117,6 +136,7 @@ export interface TableDef {
   walls: WallDef[];
   posts: PostDef[];
   gates?: GateDef[];
+  triggers?: TriggerDef[];
   flippers: FlipperDef[];
   plunger?: PlungerDef;
   /** Named shots: ordered lists of switch names the rules treat as one shot. */

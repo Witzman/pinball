@@ -84,6 +84,25 @@ export function validateTable(t: TableDef): string[] {
     useSwitch(g.switch, g.shared);
   });
 
+  const triggerIds = new Map<string, number>();
+  (t.triggers ?? []).forEach((tr, i) => {
+    const where = `trigger "${tr.id}" (#${i})`;
+    triggerIds.set(tr.id, (triggerIds.get(tr.id) ?? 0) + 1);
+    if (tr.id === "") fail(`${where}: id must not be empty`);
+    if (!(tr.r > 0)) fail(`${where}: radius must be positive`);
+    if (!inside(tr.at)) fail(`${where}: outside the playfield`);
+    checkZones(where, tr.zones);
+    if (tr.switch === undefined || tr.switch === "") fail(`${where}: needs a switch name`);
+    else useSwitch(tr.switch, tr.shared);
+    if (tr.hold) {
+      if (!(tr.hold.kickSpeed > 0 && Number.isFinite(tr.hold.kickSpeed))) fail(`${where}: kickSpeed must be positive`);
+      if (!Number.isFinite(tr.hold.kickDeg)) fail(`${where}: kickDeg must be a number`);
+      // a held ball sits at the centre, so the sinkhole must be smaller than the ball
+      if (tr.r > t.ball.radius) fail(`${where}: a sinkhole must not be wider than the ball (radius ${tr.r} > ${t.ball.radius})`);
+    }
+  });
+  for (const [id, n] of triggerIds) if (n > 1) fail(`trigger "${id}" is used by ${n} definitions; ids must be unique`);
+
   const flipperIds = new Map<string, number>();
   for (const f of t.flippers) {
     const where = `flipper "${f.id}"`;

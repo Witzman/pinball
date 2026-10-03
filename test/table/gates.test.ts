@@ -41,7 +41,7 @@ describe("gates in table data", () => {
   it("changes a ball's zone and reports the crossing when the table is played", () => {
     const t = loadTable(withGates([{ a: [100, 500], b: [300, 500], zoneA: 0, zoneB: 1, switch: "ramp_enter" }]));
     t.world.gravity = 0;
-    t.world.balls.push({ x: 0.2, y: 0.55, vx: 0, vy: -1, w: 0, r: t.ballRadius, m: t.ballMass, zone: 0 });
+    t.world.balls.push({ x: 0.2, y: 0.55, vx: 0, vy: -1, w: 0, r: t.ballRadius, m: t.ballMass, zone: 0, hold: 0 });
     const events: number[] = [];
     for (let i = 0; i < 100; i++) {
       step(t.world);
