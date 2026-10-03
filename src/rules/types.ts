@@ -104,6 +104,7 @@ export interface RulesState {
   balls: BallMgr;
   /** Null when the table has no flow (free play). */
   game: GameState | null;
+  /** `persist` is reserved for per-player values (#11 later); nothing writes it yet. */
   player: { score: number; ballNo: number; persist: Record<string, number> };
 }
 

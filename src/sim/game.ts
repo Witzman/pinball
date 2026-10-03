@@ -62,7 +62,8 @@ const DRAIN_MARGIN = 0.03;
 
 export function createGame(def: TableDef, opts: GameOptions = {}): Game {
   const table = loadTable(def);
-  const rules = createRules(opts.rules ?? freePlay, {
+  // free play feeds a ball on every drain, which would stop any game from ending: a flow gets plain rules
+  const rules = createRules(opts.rules ?? (opts.flow ? { modes: {} } : freePlay), {
     seed: opts.seed ?? 1,
     shots: def.shots,
     ...(opts.flow ? { flow: opts.flow } : {}),

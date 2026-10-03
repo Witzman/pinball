@@ -198,6 +198,27 @@ describe("the game flow", () => {
     expect(h.state.player.ballNo).toBe(2);
   });
 
+  it("does not let an exit handler start a mode or feed a ball while the table is being cleared", () => {
+    const leaky = (what: (c: Parameters<NonNullable<TableRules["onSwitch"]>>[0]) => void): TableRules => ({
+      modes: {
+        a: { start: "p", phases: { p: { exit: what } } },
+        b: { start: "p", phases: { p: {} } },
+      },
+      onSwitch: (c, e) => { if (e.sw === "go") c.start("a"); },
+    });
+    for (const [name, what] of [["start", (c: Parameters<NonNullable<TableRules["onSwitch"]>>[0]) => c.start("b")], ["feed", (c: Parameters<NonNullable<TableRules["onSwitch"]>>[0]) => c.ball.feed()]] as const) {
+      const h = harness(leaky(what), { flow: cfg });
+      startGame(h);
+      h.at(20).hit("go").run(21);
+      expect(() => h.at(30).drain().run(31), name).toThrow(/while the game flow clears the table/);
+    }
+    // outside a reset the same calls are fine
+    const ok = harness(leaky((c) => c.add("left")), { flow: cfg });
+    startGame(ok);
+    ok.at(20).hit("go").at(30).drain().run(31);
+    expect(ok.state.modes).toEqual({});
+  });
+
   it("keeps the flow's timer ids for itself", () => {
     const bad = (fn: (c: Parameters<NonNullable<TableRules["onSwitch"]>>[0]) => void) => () =>
       harness({ modes: {}, onSwitch: (c) => fn(c) }, { flow: cfg }).at(1).hit("a").run(1);
@@ -244,6 +265,22 @@ describe("saving a game in every phase", () => {
       expect(serialize(a.state), x.phase).toBe(serialize(b.state));
       expect(outA).toEqual(outB);
       expect(hashRules(a.state)).not.toBe(hashRules(restore(x.saved))); // and it did move on
+    }
+  });
+
+  it("refuses to resume a game in a phase it could never leave", () => {
+    const over = machine();
+    startGame(over);
+    over.at(20).drain().at(21).ballAtPlunger().at(22).drain().at(23).ballAtPlunger().at(24).drain().run(25);
+    const saved = restore(serialize(over.state));
+    expect(saved.game!.phase).toBe("over");
+    expect(() => createRules(table, { seed: 1, flow: cfg, state: saved })).not.toThrow();
+    delete saved.timers["flow.over"];
+    expect(() => createRules(table, { seed: 1, flow: cfg, state: saved })).toThrow(/"over" without its flow.over timer/);
+    for (const phase of ["bonus", "buyin"] as const) {
+      const s = restore(serialize(over.state));
+      s.game!.phase = phase;
+      expect(() => createRules(table, { seed: 1, flow: cfg, state: s })).toThrow(new RegExp(`phase "${phase}", which this flow does not run yet`));
     }
   });
 

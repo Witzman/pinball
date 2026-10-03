@@ -67,6 +67,30 @@ describe("a game in the game loop", () => {
     expect(g.rules.state.game!.phase).toBe("attract");
   });
 
+  it("ends a game even when the table brings no rules of its own", () => {
+    // a flow with the default rules must not inherit free play, which would feed a ball on every drain forever
+    const g = createGame(demoTable, { flow });
+    press(g, "start");
+    for (let ball = 1; ball <= 3; ball++) {
+      g.table.world.balls[0]!.y = 1.2;
+      run(g, 3);
+    }
+    expect(g.rules.state.game!.phase).toBe("over");
+    expect(g.table.world.balls).toHaveLength(0);
+  });
+
+  it("ends a game even when the table brings no rules of its own", () => {
+    // a flow with the default rules must not inherit free play, which would feed a ball on every drain forever
+    const g = createGame(demoTable, { flow });
+    press(g, "start");
+    for (let ball = 1; ball <= 3; ball++) {
+      g.table.world.balls[0]!.y = 1.2;
+      run(g, 3);
+    }
+    expect(g.rules.state.game!.phase).toBe("over");
+    expect(g.table.world.balls).toHaveLength(0);
+  });
+
   it("scores through the table's rules while a ball is in play", () => {
     const g = createGame(demoTable, setup);
     press(g, "start");
@@ -88,26 +112,35 @@ describe("a game in the game loop", () => {
     expect(g.rules.state.player.score).toBe(0);
   });
 
-  it("keeps the number of balls on the table equal to the balls the rules count, over many random games", () => {
+  it("keeps the number of balls on the table equal to the balls the rules count, and ends a game after exactly three drained balls, over many random games", () => {
     let played = 0;
     let finished = 0;
     for (let seed = 1; seed <= 25; seed++) {
       const rnd = lcg(seed);
       const g = createGame(demoTable, { ...setup, seed });
+      let before = g.rules.state.game!.phase;
+      let drainsAtStart = 0;
       for (let t = 0; t < 4000; t++) {
         const r = rnd();
         if (r < 0.004) g.input.coin = !g.input.coin;
         else if (r < 0.008) g.input.start = !g.input.start;
         else if (r < 0.012 && g.table.world.balls.length > 0) g.table.world.balls[0]!.y = 1.2;
         tick(g);
+        const here = `seed ${seed} tick ${t}`;
         const b = g.rules.state.balls;
         const locked = Object.values(b.locked).reduce((a, n) => a + n, 0);
-        expect(g.table.world.balls.length, `seed ${seed} tick ${t}`).toBe(b.inPlay + b.toFeed + locked);
+        expect(g.table.world.balls.length, here).toBe(b.inPlay + b.toFeed + locked);
         const phase = g.rules.state.game!.phase;
-        if (phase !== "play") expect(g.table.world.balls.length, `seed ${seed} tick ${t} phase ${phase}`).toBe(0);
+        if (phase !== "play") expect(g.table.world.balls.length, `${here} phase ${phase}`).toBe(0);
+        expect(g.rules.state.player.ballNo, here).toBeLessThanOrEqual(3);
+        if (before !== "play" && phase === "play") drainsAtStart = g.drains;
+        before = phase;
         for (const c of takeCommands(g)) {
           if (c.c === "feedBall") played++;
-          if (c.c === "gameOver") finished++;
+          if (c.c === "gameOver") {
+            finished++;
+            expect(g.drains - drainsAtStart, `${here}: drains in this game`).toBe(3);
+          }
         }
       }
     }

@@ -91,6 +91,12 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
   if (opts.machine && opts.state) problems.push("machine and state both given: a saved state already has its credits");
   if (opts.state && opts.flow && opts.state.game === null) problems.push("saved state has no game but the table runs with a flow");
   if (opts.state && !opts.flow && opts.state.game !== null) problems.push("saved state has a game but the table runs without a flow");
+  if (opts.state && opts.flow && opts.state.game) {
+    const g = opts.state.game;
+    // phases the flow cannot leave would hold a restored game forever
+    if (g.phase === "bonus" || g.phase === "buyin") problems.push(`saved state is in phase "${g.phase}", which this flow does not run yet`);
+    if (g.phase === "over" && !Object.hasOwn(opts.state.timers, "flow.over")) problems.push('saved state is in phase "over" without its flow.over timer');
+  }
   if (problems.length > 0) throw new Error(`rules cannot start:\n${problems.join("\n")}`);
 
   const state = opts.state ? structuredClone(opts.state) : createState(opts.seed);
@@ -101,6 +107,8 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
   let depth = 0;
   /** Ball of the switch event being handled, or -1. */
   let curBall = -1;
+  /** True while the flow clears the table: scripts may not start modes or feed balls from exit handlers then. */
+  let resetting = false;
 
   // Earliest due timer, or Infinity. Recomputed lazily so an idle tick costs one comparison.
   let minDue = Infinity;
@@ -193,6 +201,7 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
     mode: (id) => own(state.modes, id) ?? null,
     start(id) {
       const def = modeDef(id);
+      if (resetting) throw new Error(`start "${id}": a mode cannot be started while the game flow clears the table`);
       if (own(state.modes, id)) return; // already running (also while its exit handler runs)
       state.modes[id] = { phase: def.start, since: ctx.now, data: {} };
       modeIds = null;
@@ -239,6 +248,7 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
         out.push({ c: "releaseBall", lock: lockId });
       },
       feed() {
+        if (resetting) throw new Error("ball.feed: balls are not fed while the game flow clears the table");
         const b = state.balls;
         if (b.inPlay + b.toFeed + 1 > b.capacity) throw new Error(`ball.feed: more than ${b.capacity} ball(s) in play`);
         b.toFeed += 1;
@@ -266,20 +276,29 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
           dueKnown = false;
         },
         reset(keepPersist) {
-          for (const id of Object.keys(state.modes).sort(byId)) ctx.stop(id);
-          for (const id of Object.keys(state.timers)) if (!id.startsWith(FLOW_TIMER)) delete state.timers[id];
-          dueKnown = false;
-          state.shots = {};
-          for (const id of Object.keys(state.lamps).sort(byId)) {
-            if (keepPersist && persisted.has(id)) continue;
-            if (state.lamps[id] === "lit") out.push({ c: "setLamp", lamp: id, state: "off" });
-            delete state.lamps[id];
+          resetting = true;
+          try {
+            clearTable(keepPersist);
+          } finally {
+            resetting = false;
           }
-          for (const id of Object.keys(state.counters)) if (!(keepPersist && persisted.has(id))) delete state.counters[id];
         },
         feed: () => ctx.ball.feed(),
       })
     : null;
+
+  function clearTable(keepPersist: boolean): void {
+    for (const id of Object.keys(state.modes).sort(byId)) ctx.stop(id);
+    for (const id of Object.keys(state.timers)) if (!id.startsWith(FLOW_TIMER)) delete state.timers[id];
+    dueKnown = false;
+    state.shots = {};
+    for (const id of Object.keys(state.lamps).sort(byId)) {
+      if (keepPersist && persisted.has(id)) continue;
+      if (state.lamps[id] === "lit") out.push({ c: "setLamp", lamp: id, state: "off" });
+      delete state.lamps[id];
+    }
+    for (const id of Object.keys(state.counters)) if (!(keepPersist && persisted.has(id))) delete state.counters[id];
+  }
 
   /** Mode handlers for an event: the modes running when it began, in id order, skipping any stopped meanwhile. */
   const toModes = (e: RulesEvent): void => {
