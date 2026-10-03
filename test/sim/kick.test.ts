@@ -6,10 +6,12 @@ import { runReplay } from "../../src/sim/replay";
 import { demoTable } from "../../src/tables/demo";
 
 // the demo table with a sling across the middle of the playfield: a rubber wall that kicks and has a switch
+const bare = structuredClone(demoTable);
+for (const c of [...bare.walls, ...bare.posts]) delete c.kick; // the demo's own kickers would hit the sling's ball too
 const slingTable: TableDef = {
-  ...structuredClone(demoTable),
+  ...bare,
   id: "sling-test",
-  walls: [...demoTable.walls, { type: "segment", a: [150, 600], b: [330, 600], material: "rubber", switch: "sling", kick: { speed: 1.6, minHit: 0.4, cooldownMs: 40 } }],
+  walls: [...bare.walls, { type: "segment", a: [150, 600], b: [330, 600], material: "rubber", switch: "sling", kick: { speed: 1.6, minHit: 0.4, cooldownMs: 40 } }],
 };
 
 function play() {

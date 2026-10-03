@@ -4,8 +4,14 @@ import type { KickDef, TableDef } from "../../src/table/schema";
 import { validateTable } from "../../src/table/validate";
 import { demoTable } from "../../src/tables/demo";
 
-function withKick(patch: (t: TableDef) => void): TableDef {
+/** The demo table without its own kickers, so the tests count only the ones they add. */
+function plain(): TableDef {
   const t = structuredClone(demoTable);
+  for (const c of [...t.walls, ...t.posts]) delete c.kick;
+  return t;
+}
+function withKick(patch: (t: TableDef) => void): TableDef {
+  const t = plain();
   patch(t);
   return t;
 }

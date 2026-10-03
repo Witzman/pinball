@@ -17,10 +17,11 @@ export const demoFlow: FlowConfig = {
   buyIn: { cost: 1, balls: 2, windowTicks: 10000 },
 };
 
-/** One standup target worth 1000, and a bonus of 500 for each hit. */
+/** One standup target worth 1000 (a bonus of 500 for each hit) and two pop bumpers worth 100 each. */
 export const demoRules: TableRules = {
   modes: {},
   onSwitch(c, e) {
+    if (e.sw === "bumper1" || e.sw === "bumper2") c.addScore(100);
     if (e.sw === "target1") {
       c.addScore(1000);
       c.add("hits");
