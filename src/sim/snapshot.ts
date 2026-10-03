@@ -1,6 +1,7 @@
 import type { LitState } from "../rules";
 import type { LoadedTable } from "../table/load";
 import { cameraFor } from "./camera";
+import type { AudioEvent } from "./audio-events";
 import type { Game } from "./game";
 
 // What a renderer sees (issue #21): plain data, JSON-serialisable, metres, +y down the
@@ -49,6 +50,8 @@ export interface Snapshot {
   lamps: Record<string, LitState>;
   /** The text the player reads, and what it depends on; built by the app from the rules state. */
   hud: { lines: string[]; tilted: boolean; phase: string };
+  /** Switches hit since the last snapshot, for flashes and the like: `s` is the strength 0..1. */
+  hits: { sw: string; s: number; kick: boolean }[];
   camera: Camera;
 }
 
@@ -56,8 +59,8 @@ export interface Snapshot {
 export interface StaticScene {
   width: number;
   length: number;
-  walls: { ax: number; ay: number; bx: number; by: number; kind: "wall" | "rubber" | "switch"; zoneMask: number }[];
-  posts: { x: number; y: number; r: number; kind: "post" | "switch"; zoneMask: number }[];
+  walls: { ax: number; ay: number; bx: number; by: number; kind: "wall" | "rubber" | "switch"; zoneMask: number; sw: string | null }[];
+  posts: { x: number; y: number; r: number; kind: "post" | "switch"; zoneMask: number; /** The switch it reports, for effects; null if none. */ sw: string | null }[];
   triggers: { id: string; x: number; y: number; r: number; hold: boolean }[];
   /** Height of each zone's level above the playfield, metres. */
   heights: number[];
@@ -70,8 +73,8 @@ export function buildScene(table: LoadedTable): StaticScene {
   return {
     width: table.playfieldWidth,
     length: table.playfieldLength,
-    walls: w.segments.map((s) => ({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, kind: s.sw > 0 ? "switch" : s.e > 0.5 ? "rubber" : "wall", zoneMask: s.zoneMask })),
-    posts: w.circles.map((c) => ({ x: c.x, y: c.y, r: c.r, kind: c.sw > 0 ? "switch" : "post", zoneMask: c.zoneMask })),
+    walls: w.segments.map((s) => ({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, kind: s.sw > 0 ? "switch" : s.e > 0.5 ? "rubber" : "wall", zoneMask: s.zoneMask, sw: s.sw > 0 ? table.switchNames[s.sw - 1]! : null })),
+    posts: w.circles.map((c) => ({ x: c.x, y: c.y, r: c.r, kind: c.sw > 0 ? "switch" : "post", zoneMask: c.zoneMask, sw: c.sw > 0 ? table.switchNames[c.sw - 1]! : null })),
     triggers: w.triggers.map((t, i) => ({ id: table.triggerIds[i]!, x: t.x, y: t.y, r: t.r, hold: t.hold })),
     heights: [...table.heights],
     ramps: table.ramps.map((r) => ({ zone: r.zone, width: r.width, path: r.path.map((q) => ({ ...q })), heights: [...r.heights] })),
@@ -108,7 +111,7 @@ export function ballHeight(table: LoadedTable, b: { x: number; y: number; zone: 
 }
 
 /** A copy of the moment: nothing in it points into the game. `hudLines` is what the app wants on screen; `cameraMode` picks the view. */
-export function snapshot(g: Game, hudLines: readonly string[] = [], cameraMode: Camera["mode"] = "top"): Snapshot {
+export function snapshot(g: Game, hudLines: readonly string[] = [], cameraMode: Camera["mode"] = "top", events: readonly AudioEvent[] = []): Snapshot {
   const w = g.table.world;
   const p = w.plunger;
   const game = g.rules.state.game;
@@ -122,6 +125,7 @@ export function snapshot(g: Game, hudLines: readonly string[] = [], cameraMode: 
     magnets: w.magnets.map((m) => ({ x: m.x, y: m.y, r: m.r, on: m.on })),
     lamps: { ...g.rules.state.lamps },
     hud: { lines: [...hudLines], tilted: game?.tilted === true, phase: game?.phase ?? "" },
+    hits: events.flatMap((e) => (e.a === "switch" ? [{ sw: e.sw, s: e.s, kick: e.kind === "kick" }] : [])),
     camera: cameraFor(cameraMode, g.table.playfieldWidth, g.table.playfieldLength, g.table.world.balls[0] ?? null),
   };
 }

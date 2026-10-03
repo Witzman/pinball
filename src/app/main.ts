@@ -150,13 +150,14 @@ async function boot(): Promise<void> {
     give(latch.frameDone());
     const cmds = takeCommands(game);
     keeper.apply(cmds); // credits and scores are saved; lamps and the display have no listeners yet (#14)
-    audio.feed(takeAudio(game), cmds);
+    const heard = takeAudio(game);
+    audio.feed(heard, cmds);
     if (reported < game.errorCount) {
       console.error("the game recovered from an error:", game.errors[game.errors.length - 1]);
       reported = game.errorCount;
     }
     last = now;
-    draw.draw(snapshot(game, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, flow.startCost), cameraMode));
+    draw.draw(snapshot(game, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, flow.startCost), cameraMode, heard.events));
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -169,6 +170,13 @@ async function boot(): Promise<void> {
     setTimeout(() => (keys.plunge = true), 900);
     setTimeout(() => (keys.plunge = false), 900 + auto);
     setInterval(() => mergeInput(), 16);
+    // ?shoot=1 as well: at 2 s put the ball in the middle of the table, fast, aimed at the bumpers (for screenshots of the effects)
+    if (new URLSearchParams(location.search).get("shoot") === "1") {
+      setTimeout(() => {
+        const ball = game.table.world.balls[0];
+        if (ball) Object.assign(ball, { x: 0.3, y: 0.62, vx: -0.35, vy: -2.6, zone: 0 });
+      }, 2000);
+    }
   }
 
   // a handle for automated checks (screenshots); not part of the game
