@@ -7,12 +7,13 @@ import type { GameInput } from "../sim/game";
 import { buildScene, snapshot } from "../sim/snapshot";
 import { localStore } from "../storage";
 import { hudLines } from "./hud";
+import { chooseRenderer } from "./renderer-choice";
 import { createKeeper, machineKey, toMachine } from "./machine";
 import { chooseTable } from "./table-choice";
 
 const found = document.getElementById("table");
 if (!(found instanceof HTMLCanvasElement)) throw new Error("canvas #table missing");
-const canvas: HTMLCanvasElement = found;
+let canvas: HTMLCanvasElement = found;
 const banner = document.getElementById("banner");
 
 async function boot(): Promise<void> {
@@ -28,19 +29,31 @@ async function boot(): Promise<void> {
   const game = createGame(def, { ...setup, machine: toMachine(stored) });
   const keys: GameInput = { left: false, right: false, plunge: false, coin: false, start: false, buyin: false };
   const touch = new TouchTracker(innerWidth, innerHeight);
-  // ?renderer=playcanvas draws the 3D table (#45); anything else is the canvas placeholder
-  const usePlayCanvas = new URLSearchParams(location.search).get("renderer") === "playcanvas";
-  let renderer: Renderer;
+  // the 3D table (#45) unless ?renderer=canvas, or the browser has no WebGL, or the engine fails to start
+  const probe = document.createElement("canvas");
+  const webgl = (probe.getContext("webgl2") ?? probe.getContext("webgl")) !== null;
+  let usePlayCanvas = chooseRenderer(location.search, webgl) === "playcanvas";
+  let renderer: Renderer | null = null;
   if (usePlayCanvas) {
-    const { createPlayCanvasRenderer } = await import("../render/playcanvas");
-    renderer = createPlayCanvasRenderer({ canvas, overlayParent: document.body });
-  } else {
+    try {
+      const { createPlayCanvasRenderer } = await import("../render/playcanvas");
+      renderer = createPlayCanvasRenderer({ canvas, overlayParent: document.body });
+    } catch (e) {
+      console.warn("the 3D renderer could not start, drawing the plain table", e);
+      usePlayCanvas = false;
+      const fresh = canvas.cloneNode(false) as HTMLCanvasElement; // a canvas that has tried WebGL is not trusted with a 2D context
+      canvas.replaceWith(fresh);
+      canvas = fresh;
+    }
+  }
+  if (renderer === null) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("2d canvas not available");
     renderer = createCanvasRenderer(ctx);
   }
+  const draw: Renderer = renderer;
   const cameraMode = usePlayCanvas ? "tilted" : "top";
-  renderer.setScene(buildScene(game.table));
+  draw.setScene(buildScene(game.table));
 
   function resize(): void {
     const dpr = devicePixelRatio || 1;
@@ -48,7 +61,7 @@ async function boot(): Promise<void> {
       canvas.width = Math.round(innerWidth * dpr);
       canvas.height = Math.round(innerHeight * dpr);
     }
-    renderer.resize(innerWidth, innerHeight, dpr);
+    draw.resize(innerWidth, innerHeight, dpr);
     touch.resize(innerWidth, innerHeight);
   }
   addEventListener("resize", resize);
@@ -143,7 +156,7 @@ async function boot(): Promise<void> {
       reported = game.errorCount;
     }
     last = now;
-    renderer.draw(snapshot(game, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, flow.startCost), cameraMode));
+    draw.draw(snapshot(game, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, flow.startCost), cameraMode));
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

@@ -107,7 +107,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     amber: material({ diffuse: [0.95, 0.6, 0.15], emissive: [1, 0.55, 0.1], emissiveIntensity: 0.7, metal: 0.2, gloss: 0.7 }),
     bumperBody: material({ diffuse: [0.6, 0.07, 0.05], metal: 0.15, gloss: 0.75 }),
     bumperCap: material({ diffuse: [1, 0.8, 0.35], emissive: [1, 0.65, 0.2], emissiveIntensity: 1.4, metal: 0, gloss: 0.95 }),
-    flipper: material({ diffuse: [0.97, 0.95, 0.9], metal: 0.2, gloss: 0.85 }),
+    flipper: material({ diffuse: [0.98, 0.93, 0.78], metal: 0.1, gloss: 0.9 }),
     flipperRubber: material({ diffuse: [0.85, 0.08, 0.06], metal: 0, gloss: 0.55 }),
     ball: material({ diffuse: [0.95, 0.96, 1], metal: 1, gloss: 0.98 }),
     hole: material({ diffuse: [0.02, 0.02, 0.02], metal: 0, gloss: 0.2 }),
@@ -302,25 +302,61 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
   let displayTexture: pc.Texture | null = null;
   let displayText = "";
 
-  function flipperParts(i: number): pc.Entity[] {
+  /** A flipper's body: a prism with the pivot at the origin, the axis along +x, `len` long, as wide as the end radii (r0 at the pivot, r1 at the tip), `hgt` tall. Built once per flipper. */
+  function flipperMesh(len: number, r0: number, r1: number, hgt: number): pc.Mesh {
+    const pos: number[] = [];
+    const nor: number[] = [];
+    const idx: number[] = [];
+    const quad = (a: number[], b: number[], c: number[], d: number[], n: number[]) => {
+      const base = pos.length / 3;
+      for (const v of [a, b, c, d]) {
+        pos.push(...v);
+        nor.push(...n);
+      }
+      idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+    };
+    // top and bottom
+    quad([0, hgt, -r0], [len, hgt, -r1], [len, hgt, r1], [0, hgt, r0], [0, 1, 0]);
+    quad([0, 0, r0], [len, 0, r1], [len, 0, -r1], [0, 0, -r0], [0, -1, 0]);
+    // the two long sides, with their slanted normals
+    const slope = (r0 - r1) / len;
+    const nl = Math.hypot(1, slope);
+    quad([0, 0, -r0], [len, 0, -r1], [len, hgt, -r1], [0, hgt, -r0], [slope / nl, 0, -1 / nl]);
+    quad([len, 0, r1], [0, 0, r0], [0, hgt, r0], [len, hgt, r1], [slope / nl, 0, 1 / nl]);
+    const mesh = new pc.Mesh(app.graphicsDevice);
+    mesh.setPositions(pos);
+    mesh.setNormals(nor);
+    mesh.setIndices(idx);
+    mesh.update();
+    return mesh;
+  }
+
+  function flipperParts(i: number, f: FlipperView): pc.Entity[] {
     let parts = flipperEntities[i];
     if (!parts) {
-      parts = [add(dyn, "cylinder", mats.flipperRubber), add(dyn, "cylinder", mats.flipperRubber), add(dyn, "box", mats.flipper)];
+      const len = Math.hypot((f.tx - f.px) * S, (f.ty - f.py) * S);
+      const hgt = RAIL_H + 0.3;
+      const body = new pc.Entity();
+      body.addComponent("render", { meshInstances: [new pc.MeshInstance(flipperMesh(len, f.r0 * S, f.r1 * S, hgt), mats.flipper)], castShadows: true, receiveShadows: true });
+      dyn.addChild(body);
+      parts = [add(dyn, "cylinder", mats.flipperRubber), add(dyn, "cylinder", mats.flipperRubber), body];
       flipperEntities[i] = parts;
     }
     return parts;
   }
 
   function updateFlipper(i: number, f: FlipperView): void {
-    const [a, b, body] = flipperParts(i) as [pc.Entity, pc.Entity, pc.Entity];
+    const [a, b, body] = flipperParts(i, f) as [pc.Entity, pc.Entity, pc.Entity];
     const px = X(f.px);
     const pz = Z(f.py);
     const tx = X(f.tx);
     const tz = Z(f.ty);
-    place(a, px, RAIL_H / 2 + 0.2, pz, f.r0 * S * 2, RAIL_H + 0.4, f.r0 * S * 2);
-    place(b, tx, RAIL_H / 2 + 0.2, tz, f.r1 * S * 2, RAIL_H + 0.4, f.r1 * S * 2);
-    const len = Math.hypot(tx - px, tz - pz);
-    place(body, (px + tx) / 2, RAIL_H / 2 + 0.2, (pz + tz) / 2, len, RAIL_H + 0.4, (f.r0 + f.r1) * S, (-Math.atan2(tz - pz, tx - px) * 180) / Math.PI);
+    const hgt = RAIL_H + 0.3;
+    place(a, px, hgt / 2 - 0.02, pz, f.r0 * S * 2, hgt - 0.04, f.r0 * S * 2);
+    place(b, tx, hgt / 2 - 0.02, tz, f.r1 * S * 2, hgt - 0.04, f.r1 * S * 2);
+    body.setLocalPosition(px, 0, pz);
+    body.setLocalScale(1, 1, 1);
+    body.setLocalEulerAngles(0, (-Math.atan2(tz - pz, tx - px) * 180) / Math.PI, 0);
   }
 
   let framedFor = "";
