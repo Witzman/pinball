@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advance, createGame, takeCommands, tick } from "../../src/sim/game";
+import { advance, createGame, recover, takeCommands, tick } from "../../src/sim/game";
 import type { TableRules } from "../../src/rules";
 import type { TableDef } from "../../src/table/schema";
 import { runReplay } from "../../src/sim/replay";
@@ -50,5 +50,12 @@ describe("a kicker in a game", () => {
     advance(g, 20);
     takeCommands(g);
     expect(g.table.world.kickWait.length).toBe(1);
+  });
+
+  it("clears the cooldowns when the game recovers from an error, so the world hashes like a fresh one", () => {
+    const { g } = play();
+    g.table.world.kickWait[0] = 17;
+    recover(g, new Error("boom"));
+    expect(g.table.world.kickWait[0]).toBe(0);
   });
 });

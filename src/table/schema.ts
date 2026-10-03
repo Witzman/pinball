@@ -21,7 +21,7 @@ export interface KickDef {
   speed: number;
   /** m/s, default 0.3; at least 0.1 (above the rest speed) and at most `speed`. */
   minHit?: number;
-  /** ms, integer 1..1000, default 30. */
+  /** ms from one kick to the next, integer 1..1000, default 30 (counted in whole ticks: give or take 1 ms). A ball between two facing kickers bounces for ever at the kick speed: a layout must not make that pocket. */
   cooldownMs?: number;
 }
 

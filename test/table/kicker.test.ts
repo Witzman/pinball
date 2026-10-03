@@ -71,6 +71,10 @@ describe("kicker validation", () => {
     for (const cooldownMs of [0, 1.5, -5, 1001, NaN]) expect(problems(post({ cooldownMs })), String(cooldownMs)).toMatch(/cooldownMs/);
   });
 
+  it("treats a JSON null kick as no kicker, not as a crash", () => {
+    expect(problems(withKick((x) => void x.posts.push({ at: [300, 300], r: 20, material: "rubber", kick: null as unknown as undefined })))).toBe("");
+  });
+
   it("says where the bad kicker is", () => {
     expect(problems(wall({ speed: 0 }))).toMatch(/wall #\d+ \(segment\): kick speed/);
     expect(problems(post({ speed: 0 }))).toMatch(/post #\d+: kick speed/);

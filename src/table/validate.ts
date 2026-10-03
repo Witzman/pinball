@@ -50,7 +50,7 @@ export function validateTable(t: TableDef): string[] {
   };
 
   const checkKick = (where: string, k: KickDef | undefined) => {
-    if (k === undefined) return;
+    if (k == null) return; // also a JSON null
     if (!(Number.isFinite(k.speed) && k.speed > 0 && k.speed <= MAX_KICK_SPEED)) fail(`${where}: kick speed ${k.speed} must be a number above 0 and at most ${MAX_KICK_SPEED} m/s`);
     const min = k.minHit ?? DEFAULT_KICK_MIN;
     if (!(Number.isFinite(min) && min >= MIN_KICK_HIT && min <= k.speed)) fail(`${where}: kick minHit ${min} must be from ${MIN_KICK_HIT} up to the kick speed`);

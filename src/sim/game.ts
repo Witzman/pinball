@@ -276,6 +276,7 @@ export function recover(g: Game, error: unknown): void {
   const w = g.table.world;
   w.balls.length = 0;
   for (const m of w.magnets) m.on = false;
+  w.kickWait.fill(0); // a recovered world hashes like a fresh one
   g.rules = createRules(options.rules ?? (options.flow ? { modes: {} } : freePlay), {
     seed: options.seed ?? 1,
     shots: def.shots,

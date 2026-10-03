@@ -88,10 +88,13 @@ describe("kicker colliders", () => {
       expect(w.kickWait[0]).toBe(0);
     });
 
-    it("with a cooldown of one tick still lets one kick through per hit", () => {
+    it("with a cooldown of one tick blocks only the rest of the tick of the kick: armed again on the next step", () => {
       const w = make(1, [floor({ kickCd: 1 })]);
-      const seen = run(w, 40);
-      expect(seen.filter(([k]) => k === CONTACT_KICK)).toHaveLength(1);
+      step(w);
+      while (w.contacts.n === 0) step(w);
+      expect(w.kickWait[0]).toBe(1);
+      step(w);
+      expect(w.kickWait[0]).toBe(0);
     });
   });
 
@@ -102,6 +105,14 @@ describe("kicker colliders", () => {
     expect(seen.map(([k]) => k)).toEqual([CONTACT_KICK]);
     expect(w.balls[0]!.vx).toBeCloseTo(-KICK, 6);
     expect(Math.abs(w.balls[0]!.vy)).toBeLessThan(1e-9);
+  });
+
+  it("kicks off the end of a wall, head on: the end cap carries the kick too", () => {
+    const wallEnd = wall(0.6, 0.5, 1, 0.5, { e: 0.5, sw: 1, kick: KICK, kickMin: 0.3, kickCd: 30, kid: 0 });
+    const w = createWorld({ balls: [ball({ x: 0.3, y: 0.5, vx: 1 })], segments: [wallEnd], circles: [], gravity: 0, kickWait: new Int32Array(1) });
+    const seen = run(w, 400);
+    expect(seen.map(([k]) => k)).toEqual([CONTACT_KICK]);
+    expect(w.balls[0]!.vx).toBeCloseTo(-KICK, 6);
   });
 
   it("ignores a kicker in another zone", () => {
