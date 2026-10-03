@@ -5,7 +5,7 @@ import { advancePlunger, hitPlunger } from "./plunger";
 import { hitCircle, setHit } from "./sweep";
 import type { Hit } from "./sweep";
 import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_TRIGGER } from "./types";
-import type { Ball, World } from "./types";
+import type { Ball, Magnet, World } from "./types";
 
 /** The fixed physics step in seconds. Part of the replay header. */
 export const DT = 0.001;
@@ -140,6 +140,18 @@ function crossGates(w: World, b: Ball, bi: number, x0: number, y0: number): void
   }
 }
 
+/** Pull of one magnet on a ball for one tick. */
+function attract(m: Magnet, b: Ball): void {
+  if (!m.on || (m.zoneMask & (1 << b.zone)) === 0) return;
+  const dx = m.x - b.x;
+  const dy = m.y - b.y;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  if (d >= m.r || d === 0) return;
+  const k = (m.strength * (1 - d / m.r) * DT) / d;
+  b.vx += dx * k;
+  b.vy += dy * k;
+}
+
 /** Rollovers and sinkholes for a ball that moved from (x0, y0) to where it is now. */
 function enterTriggers(w: World, b: Ball, bi: number, x0: number, y0: number): void {
   const dx = b.x - x0;
@@ -205,6 +217,7 @@ export function step(w: World): void {
     const b = w.balls[bi]!;
     if (b.hold !== 0) continue; // held in a sinkhole
     for (const f of w.flippers) pushOutFlipper(f, b);
+    for (let k = 0; k < w.magnets.length; k++) attract(w.magnets[k]!, b);
     b.vy += w.gravity * DT;
     b.vx *= 1 - w.drag * DT;
     b.vy *= 1 - w.drag * DT;

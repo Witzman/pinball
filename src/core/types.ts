@@ -153,6 +153,20 @@ export interface Trigger {
   kickSpeed: number;
 }
 
+/**
+ * A magnet: while `on`, a ball in a matching zone within `r` of the centre is
+ * pulled towards it with an acceleration that falls linearly from `strength`
+ * (m/s^2) at the centre to 0 at the edge. The rules switch it on and off.
+ */
+export interface Magnet {
+  x: number;
+  y: number;
+  r: number;
+  strength: number;
+  zoneMask: number;
+  on: boolean;
+}
+
 /** What a contact record means. */
 export const CONTACT_HIT = 0;
 export const CONTACT_GATE_AB = 1;
@@ -196,6 +210,7 @@ export interface World {
   circles: Circle[];
   gates: Gate[];
   triggers: Trigger[];
+  magnets: Magnet[];
   flippers: Flipper[];
   plunger: Plunger | null;
   /** Effective gravity along +y, m/s^2 (already projected for the slope). */

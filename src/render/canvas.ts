@@ -84,6 +84,13 @@ export function drawScene(ctx: CanvasRenderingContext2D, cw: number, ch: number,
     ctx.stroke();
   }
 
+  for (const m of w.magnets) {
+    ctx.strokeStyle = m.on ? "#ff6b9d" : "#7d5a6e";
+    ctx.beginPath();
+    ctx.arc(X(m.x), Y(m.y), m.r * v.scale, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   const p = snap.plunger;
   if (p) {
     const cx = p.x - p.dirx * p.pos;

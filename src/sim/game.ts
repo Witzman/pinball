@@ -51,6 +51,13 @@ export function kickTrigger(g: Game, id: string): boolean {
   return kickHeld(g.table.world, ti) >= 0;
 }
 
+/** Switches the magnet `id` on or off. */
+export function setMagnet(g: Game, id: string, on: boolean): void {
+  const mi = g.table.magnetIds.indexOf(id);
+  if (mi < 0) throw new Error(`unknown magnet "${id}"`);
+  g.table.world.magnets[mi]!.on = on;
+}
+
 export function setPaused(g: Game, paused: boolean): void {
   g.paused = paused;
 }

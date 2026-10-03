@@ -2,6 +2,8 @@ import { DT } from "../core/step";
 import type { Point, TableDef } from "./schema";
 
 const MAX_ZONE = 30;
+/** Largest magnet pull (m/s^2) a table may ask for. */
+const MAX_MAGNET_STRENGTH = 20;
 /** Geometry may overhang the playfield box by this much (mm), e.g. a plunger lane wall. */
 const MARGIN = 5;
 
@@ -102,6 +104,20 @@ export function validateTable(t: TableDef): string[] {
     }
   });
   for (const [id, n] of triggerIds) if (n > 1) fail(`trigger "${id}" is used by ${n} definitions; ids must be unique`);
+
+  const magnetIds = new Map<string, number>();
+  (t.magnets ?? []).forEach((m, i) => {
+    const where = `magnet "${m.id}" (#${i})`;
+    magnetIds.set(m.id, (magnetIds.get(m.id) ?? 0) + 1);
+    if (m.id === "") fail(`${where}: id must not be empty`);
+    if (!(m.r > 0 && Number.isFinite(m.r))) fail(`${where}: radius must be positive`);
+    if (!inside(m.at)) fail(`${where}: outside the playfield`);
+    checkZones(where, m.zones);
+    if (!(m.strength > 0 && Number.isFinite(m.strength))) fail(`${where}: strength must be positive`);
+    // a pull far above gravity would fling the ball: more than 20 m/s^2 is almost certainly a unit mistake
+    if (m.strength > MAX_MAGNET_STRENGTH) fail(`${where}: strength ${m.strength} m/s^2 is above ${MAX_MAGNET_STRENGTH}`);
+  });
+  for (const [id, n] of magnetIds) if (n > 1) fail(`magnet "${id}" is used by ${n} definitions; ids must be unique`);
 
   const flipperIds = new Map<string, number>();
   for (const f of t.flippers) {
