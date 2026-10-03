@@ -11,6 +11,8 @@ export type RulesEvent =
   | { t: "button"; tick: number; button: "left" | "right" | "plunge" | "coin" | "start" | "buyin"; down: boolean }
   | { t: "drain"; tick: number; ball: number }
   | { t: "ballAtPlunger"; tick: number }
+  /** The player shoved the table and at least one ball felt it. */
+  | { t: "nudge"; tick: number; dir: "left" | "right" | "up" }
   // made by the engine itself:
   | { t: "timer"; tick: number; id: string; tag?: string }
   | { t: "shot"; tick: number; shot: string };

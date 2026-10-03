@@ -189,6 +189,23 @@ function enterTriggers(w: World, b: Ball, bi: number, x0: number, y0: number): v
   }
 }
 
+/**
+ * A nudge: every free ball (not held in a sinkhole) gets the velocity change (dvx, dvy).
+ * Called between steps like `kickHeld`, never inside one. Returns how many balls it
+ * kicked. Only + and *, so replays stay exact.
+ */
+export function nudge(w: World, dvx: number, dvy: number): number {
+  let n = 0;
+  for (let i = 0; i < w.balls.length; i++) {
+    const b = w.balls[i]!;
+    if (b.hold !== 0) continue;
+    b.vx += dvx;
+    b.vy += dvy;
+    n += 1;
+  }
+  return n;
+}
+
 /** Sends the ball held in sinkhole `ti` out along its kick direction. Returns the ball's index, or -1 if none was held. */
 export function kickHeld(w: World, ti: number): number {
   const t = w.triggers[ti];

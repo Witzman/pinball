@@ -1,7 +1,7 @@
 import { applyKey, ButtonLatch, TouchTracker } from "../input/input";
 import { drawScene } from "../render/canvas";
 import { drawHud } from "../render/hud";
-import { advance, createGame, setPaused, snapshot, takeCommands } from "../sim/game";
+import { advance, createGame, nudge, setPaused, snapshot, takeCommands } from "../sim/game";
 import type { GameInput } from "../sim/game";
 import { localStore } from "../storage";
 import { demoTable } from "../tables/demo";
@@ -58,7 +58,9 @@ async function boot(): Promise<void> {
 
   addEventListener("keydown", (e) => {
     if (e.repeat) return;
-    if (applyKey(keys, e.code, true) === "pause") pause(!game.paused);
+    const result = applyKey(keys, e.code, true);
+    if (result === "pause") pause(!game.paused);
+    else if (result !== undefined) nudge(game, result);
     mergeInput();
     if (["Space", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
   });
@@ -69,11 +71,12 @@ async function boot(): Promise<void> {
 
   canvas.addEventListener("pointerdown", (e) => {
     canvas.setPointerCapture(e.pointerId);
-    touch.down(e.pointerId, e.clientX, e.clientY);
+    touch.down(e.pointerId, e.clientX, e.clientY, e.timeStamp);
     mergeInput();
   });
   canvas.addEventListener("pointermove", (e) => {
-    touch.move(e.pointerId, e.clientX, e.clientY);
+    const dir = touch.move(e.pointerId, e.clientX, e.clientY, e.timeStamp);
+    if (dir !== null) nudge(game, dir);
     mergeInput();
   });
   for (const type of ["pointerup", "pointercancel"] as const) {
