@@ -1,6 +1,6 @@
 import type { FlowConfig, TableRules } from "../rules";
 import { demoFlow } from "./demo-rules";
-import { KICK_ONLY, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
+import { KICK_ONLY, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
 
 /** The proving ground's flow with the Colony's replay score; the rest are still placeholders. */
 export const colonyFlow: FlowConfig = { ...demoFlow, replayScore: REPLAY_SCORE };
@@ -45,6 +45,10 @@ export const colonyRules: TableRules = {
     if (points > 0 && (e.kind === "kick" || !KICK_ONLY.has(e.sw))) c.addScore(points);
   },
   onShot(c, shot) {
+    if (shot === "leafRamp" || shot === "rootRamp") {
+      c.addScore(RAMP_SHOT);
+      c.emit({ c: "dmd", show: { id: shot, args: { points: RAMP_SHOT } } });
+    }
     if (shot === "skillShot" && c.count("skillOpen") > 0 && c.count("superDone") === 0) {
       c.add("superDone");
       c.addScore(SUPER_SKILL_SHOT);

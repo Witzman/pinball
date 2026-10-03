@@ -7,6 +7,9 @@ export const REPLAY_SCORE = 1_000_000_000;
 export const SKILL_SHOT = 1_000_000;
 export const SUPER_SKILL_SHOT = 10_000_000;
 
+/** A ramp shot: up the Leaf Ramp or the Root Ramp and out at the top (placeholder, a tenth of a skill shot). */
+export const RAMP_SHOT = 100_000;
+
 /** Points for the small things of the outline; placeholders, far below the scale of a mission. */
 export const SWITCH_POINTS: Record<string, number> = {
   slingL: 10_000,

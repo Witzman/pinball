@@ -64,9 +64,9 @@ describe("The Colony, step 1: the outline", () => {
   });
 
   it("has a skill shot of three lane switches up the plunger lane, and the frozen switch names", () => {
-    expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"] });
-    const names = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : []))].sort();
-    expect(names).toEqual(["bumper1", "bumper2", "bumper3", "inL", "inR", "kickbackL", "outL", "outR", "rollO", "rollR", "rollW", "scout", "skill1", "skill2", "skill3", "slingL", "slingR"]);
+    expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"] });
+    const names = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : [])), ...(colonyTable.gates ?? []).flatMap((g) => (g.switch ? [g.switch] : []))].sort();
+    expect(names).toEqual(["bumper1", "bumper2", "bumper3", "inL", "inR", "kickbackL", "leafEnter", "leafExit", "outL", "outR", "rollO", "rollR", "rollW", "rootEnter", "rootExit", "scout", "skill1", "skill2", "skill3", "slingL", "slingR"]);
   });
 
   it("lets no ball rest for ever: balls dropped at rest over a grid all drain", () => {
@@ -230,7 +230,7 @@ describe("The Colony, step 1: the outline", () => {
     }
     const { g, seen } = play();
     g.table.world.gravity = 0;
-    Object.assign(g.table.world.balls[0]!, { x: 0.42, y: 0.62, vx: 0, vy: -1 }); // up at the scout from below
+    Object.assign(g.table.world.balls[0]!, { x: 0.315, y: 0.64, vx: 0, vy: -1 }); // up at the scout from below
     for (let i = 0; i < 100; i++) tick(g);
     expect(seen).toContain("scout");
   });
@@ -304,4 +304,56 @@ describe("The Colony, step 1: the outline", () => {
     const f = colonyTable.flippers.find((x) => x.id === "upperLeft")!;
     expect(f).toMatchObject({ pivot: [16, 600], restDeg: 30, activeDeg: -30, input: "left" });
   });
+
+  it("has two rising ramps, each with a mouth and an exit gate, rails in its own zone, and a height profile that climbs", () => {
+    const ramps = colonyTable.visual!.ramps!;
+    expect(ramps.map((r) => r.zone)).toEqual([1, 2]);
+    for (const r of ramps) {
+      expect(r.heights![1]!, `zone ${r.zone}`).toBeGreaterThan(r.heights![0]!);
+      const rails = colonyTable.walls.filter((w) => w.zones?.includes(r.zone));
+      expect(rails, `zone ${r.zone} rails`).toHaveLength(2);
+      const gates = colonyTable.gates!.filter((g) => g.zoneA === r.zone || g.zoneB === r.zone);
+      expect(gates.map((g) => [g.zoneA, g.zoneB])).toEqual([[0, r.zone], [r.zone, 0]]);
+    }
+  });
+
+  it("lets a ball roll up a ramp and out at the top: it enters in zone 0, climbs in its zone, leaves in zone 0, and the rules hear the shot", () => {
+    for (const [name, x, y0, enter, exit, zone] of [["leafRamp", 70, 560, "leafEnter", "leafExit", 1], ["rootRamp", 410, 700, "rootEnter", "rootExit", 2]] as const) {
+      const seen: string[] = [];
+      const shots: string[] = [];
+      const rules: TableRules = { modes: {}, onSwitch: (_c, e) => void seen.push(e.sw), onShot: (_c, s) => void shots.push(s) };
+      const g = createGame(colonyTable, { rules });
+      g.table.world.gravity = 0;
+      const b = g.table.world.balls[0]!;
+      Object.assign(b, { x: x / 1000, y: y0 / 1000, vx: 0, vy: -1.6, zone: 0 }); // just below the mouth (the Leaf mouth lies above the tip of the upper flipper)
+      const zones = new Set<number>();
+      for (let i = 0; i < 600; i++) {
+        tick(g);
+        zones.add(b.zone);
+      }
+      expect(seen, name).toEqual([enter, exit]);
+      expect(zones.has(zone), name).toBe(true);
+      expect(shots, name).toEqual([name]);
+    }
+  });
+
+  it("can be reached by a flipper: some timing of the upper flipper sends a ball up the Leaf Ramp, and some timing of the left flipper up the Root Ramp", () => {
+    const sweep = (start: [number, number], button: "left" | "right", want: string) => {
+      let hit = 0;
+      for (let press = 200; press <= 1300; press += 25) {
+        const shots: string[] = [];
+        const rules: TableRules = { modes: {}, onShot: (_c, s) => void shots.push(s) };
+        const g = createGame(colonyTable, { rules });
+        drop(g, start[0], start[1]);
+        for (let i = 0; i < 3500 && g.table.world.balls.length > 0; i++) {
+          g.input[button] = i >= press && i < press + 100;
+          tick(g);
+        }
+        if (shots.includes(want)) hit++;
+      }
+      return hit;
+    };
+    expect(sweep([25, 480], "left", "leafRamp"), "upper flipper -> Leaf Ramp").toBeGreaterThan(0);
+    expect(sweep([85, 760], "left", "rootRamp"), "left flipper -> Root Ramp").toBeGreaterThan(0);
+  }, 120000);
 });
