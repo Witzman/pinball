@@ -48,8 +48,11 @@ export class Mixer {
   play(p: Play): boolean {
     const voice: Voice = VOICES[p.id];
     const now = this.backend.now();
-    const gain = lerp(voice.gain[0], voice.gain[1], p.s) * this.master();
-    if (!(gain >= MIN_GAIN)) return false;
+    const voiceGain = lerp(voice.gain[0], voice.gain[1], p.s);
+    const master = this.master();
+    // a voice too quiet to matter is dropped by its own gain, not by the volume: a low volume makes sounds softer, it does not silence the small ones
+    if (!(voiceGain >= MIN_GAIN) || !(master > 0)) return false;
+    const gain = voiceGain * master;
     if (this.startsThisFrame >= MAX_STARTS_PER_FRAME) return false;
     const last = this.last.get(p.id);
     if (last !== undefined && (now - last.at) * 1000 < voice.cooldownMs && gain <= last.gain * LOUDER_FACTOR) return false;

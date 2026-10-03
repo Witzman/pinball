@@ -52,19 +52,22 @@ describe("what the sim gives the sound layer", () => {
     expect(takeAudio(g).events.filter((e) => e.a === "flip")).toEqual([]);
   });
 
-  it("gives a plunge event when the plunger is let go, by how far it was pulled; none when the button was never pressed", () => {
+  it("gives a plunge event when the plunger is let go, with the strength of how far it was pulled; none when the button was never pressed", () => {
     const g = createGame(demoTable);
     g.input.plunge = true;
     ticks(g, 300);
+    const p = g.table.world.plunger!;
+    const pulled = p.pos / p.stroke;
+    expect(pulled).toBeGreaterThan(0.1);
+    expect(pulled).toBeLessThan(1);
+    expect(takeAudio(g).events).toEqual([]); // nothing while it is being pulled
     g.input.plunge = false;
-    ticks(g, 2);
-    const ev = takeAudio(g).events.filter((e) => e.a === "plunge");
+    tick(g);
+    const ev = takeAudio(g).events;
     expect(ev).toHaveLength(1);
-    const s = (ev[0] as { s: number }).s;
-    expect(s).toBeGreaterThan(0.1);
-    expect(s).toBeLessThanOrEqual(1);
+    expect(ev[0]).toMatchObject({ a: "plunge" });
+    expect((ev[0] as { s: number }).s).toBeCloseTo(pulled, 12);
     const g2 = createGame(demoTable);
-    g2.input.plunge = false;
     ticks(g2, 5);
     expect(takeAudio(g2).events).toEqual([]);
   });
@@ -90,12 +93,15 @@ describe("what the sim gives the sound layer", () => {
     const g = createGame(demoTable, tableSetups.demo!);
     g.input.coin = true;
     ticks(g, 3);
+    expect(takeAudio(g).events.filter((e) => e.a === "btn")).toEqual([{ a: "btn", button: "coin" }]); // on the press, while it is still held
     g.input.coin = false;
+    ticks(g, 3);
+    expect(takeAudio(g).events.filter((e) => e.a === "btn")).toEqual([]); // not on the release
     g.input.start = true;
     ticks(g, 3);
     g.input.start = false;
     ticks(g, 3);
-    expect(takeAudio(g).events.filter((e) => e.a === "btn")).toEqual([{ a: "btn", button: "coin" }, { a: "btn", button: "start" }]);
+    expect(takeAudio(g).events.filter((e) => e.a === "btn")).toEqual([{ a: "btn", button: "start" }]);
     Object.assign(g.table.world.balls[0]!, { y: 1.2 });
     ticks(g, 3);
     expect(takeAudio(g).events).toContainEqual({ a: "drain" });
@@ -116,13 +122,31 @@ describe("what the sim gives the sound layer", () => {
     expect(takeAudio(g).events).toEqual([]);
   });
 
-  it("keeps at most 512 events if nobody listens, and forgets them when the game recovers", () => {
+  it("says gate for both directions of a gate crossing, and does not take a table's switch name for a sound class", () => {
+    const t = structuredClone(demoTable);
+    t.gates = [{ a: [40, 600], b: [100, 600], zoneA: 0, zoneB: 1, switch: "mouth" }, { a: [40, 300], b: [100, 300], zoneA: 1, zoneB: 0, switch: "constructor" }];
+    t.sounds = {};
+    delete t.visual;
+    const g = createGame(t);
+    g.table.world.gravity = 0;
+    Object.assign(g.table.world.balls[0]!, { x: 0.07, y: 0.65, vx: 0, vy: -1.5 });
+    ticks(g, 400); // up through the mouth and out at the top
+    const sw = takeAudio(g).events.filter((e) => e.a === "switch");
+    expect(sw.map((e) => [(e as { sw: string }).sw, (e as { kind: string }).kind])).toEqual([["mouth", "gate"], ["constructor", "gate"]]);
+    for (const e of sw) expect(e).not.toHaveProperty("cls"); // "constructor" is a switch name, not a class
+    Object.assign(g.table.world.balls[0]!, { x: 0.07, y: 0.25, vx: 0, vy: 1.5, zone: 0 }); // and back down from above: the other direction
+    ticks(g, 400);
+    expect(takeAudio(g).events.filter((e) => e.a === "switch").map((e) => (e as { kind: string }).kind)).toEqual(["gate", "gate"]);
+  });
+
+  it("keeps at most 512 events if nobody listens, the newest ones, and forgets them when the game recovers", () => {
     const g = createGame(demoTable);
-    for (let i = 0; i < 700; i++) {
+    for (let i = 0; i < 701; i++) { // an odd number, so the 512th and the last flip differ
       g.input.left = !g.input.left;
       tick(g);
     }
     expect(g.audioOut.length).toBe(512);
+    expect(g.audioOut[511]).toEqual({ a: "flip", side: "L", up: g.input.left }); // the last one is there
     recover(g, new Error("boom"));
     expect(g.audioOut).toEqual([]);
   });

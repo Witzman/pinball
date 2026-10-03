@@ -45,7 +45,13 @@ async function boot(): Promise<void> {
 
   // sound (#15): procedural, opened by the first gesture, loaded then and not before
   const audio = createAudio(localStore());
-  for (const type of ["keydown", "pointerdown", "touchend"] as const) addEventListener(type, () => audio.unlock(), { once: true, capture: true });
+  // every gesture asks until the device runs: Safari wants the resume inside a gesture, and a first key like Escape may not count
+  const GESTURES = ["keydown", "pointerdown", "touchend", "click"] as const;
+  const gesture = (): void => {
+    audio.unlock();
+    if (audio.running()) for (const type of GESTURES) removeEventListener(type, gesture, true);
+  };
+  for (const type of GESTURES) addEventListener(type, gesture, true);
 
   function pause(on: boolean): void {
     setPaused(game, on);

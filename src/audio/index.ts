@@ -9,7 +9,7 @@ import type { AudioSettings, KeyValue } from "./settings";
 export interface Audio {
   /** The sounds of one frame: what the sim heard and the commands the rules gave. */
   feed(batch: AudioBatch, cmds: readonly Command[]): void;
-  /** Call on a user gesture: loads the engine and opens the sound device. Only the first call does anything. */
+  /** Call on every user gesture until `running()`: the first loads the engine and opens the sound device, later ones ask a suspended device to run (Safari and iOS insist on a gesture). */
   unlock(): void;
   suspend(): void;
   resume(): void;
@@ -18,6 +18,8 @@ export interface Audio {
   settings(): AudioSettings;
   /** True once the sound device is open. */
   ready(): boolean;
+  /** True once the device is actually running (a context can be open and still suspended). */
+  running(): boolean;
 }
 
 export interface AudioDeps {
@@ -35,11 +37,14 @@ export function createAudio(store: KeyValue, deps: AudioDeps = {}): Audio {
   const available = deps.available ?? hasWebAudio;
   const warn = deps.warn ?? ((m, c) => console.warn(m, c));
   let settings: AudioSettings = { ...DEFAULT_SETTINGS };
-  let loaded = false;
-  void store.get(AUDIO_KEY).then((t) => {
-    if (!loaded) settings = parseSettings(t);
-    loaded = true;
-  }, () => undefined);
+  let muteTouched = false; // the player pressed M before the stored settings arrived: that wins over the stored mute
+  const loading = store.get(AUDIO_KEY).then(
+    (t) => {
+      const stored = parseSettings(t);
+      settings = { vol: stored.vol, mute: muteTouched ? settings.mute : stored.mute };
+    },
+    () => undefined,
+  );
   let state: "idle" | "loading" | "ready" | "off" = "idle";
   let engine: Engine | null = null;
   let mixer: Mixer | null = null;
@@ -47,12 +52,16 @@ export function createAudio(store: KeyValue, deps: AudioDeps = {}): Audio {
 
   return {
     feed(batch, cmds) {
-      if (state !== "ready" || mixer === null || paused) return;
+      if (state !== "ready" || mixer === null || engine === null || paused || !engine.running()) return; // a suspended device has a frozen clock: what is sent now would burst out later
       mixer.beginFrame();
       for (const e of batch.events) for (const p of soundsFor(e)) mixer.play(p);
       for (const c of cmds) for (const p of soundsForCommand(c)) mixer.play(p);
     },
     unlock() {
+      if (state === "ready") {
+        if (engine !== null && !engine.running() && !paused) engine.resume(); // inside the gesture, as Safari wants
+        return;
+      }
       if (state !== "idle") return;
       if (!available()) {
         state = "off";
@@ -66,7 +75,7 @@ export function createAudio(store: KeyValue, deps: AudioDeps = {}): Audio {
       };
       load().then((m) => {
         try {
-          engine = m.createEngine(); // a browser may refuse to make the context
+          engine = m.createEngine(); // a browser may refuse to make the context; it asks to run, and the next gesture asks again
           mixer = new Mixer(engine, () => masterGain(settings));
           state = "ready";
         } catch (e) {
@@ -85,12 +94,14 @@ export function createAudio(store: KeyValue, deps: AudioDeps = {}): Audio {
     },
     toggleMute() {
       settings = { ...settings, mute: !settings.mute };
-      loaded = true;
+      muteTouched = true;
       if (settings.mute) mixer?.silence();
-      void store.set(AUDIO_KEY, serializeSettings(settings)).catch((e) => warn("audio: could not save the settings", e));
+      // saved once the stored settings have arrived, so the volume in storage is not overwritten by the default
+      void loading.then(() => store.set(AUDIO_KEY, serializeSettings(settings))).catch((e) => warn("audio: could not save the settings", e));
       return settings.mute;
     },
     settings: () => ({ ...settings }),
     ready: () => state === "ready",
+    running: () => state === "ready" && engine !== null && engine.running(),
   };
 }

@@ -7,6 +7,9 @@ import { memoryStore } from "../../src/storage";
 
 class FakeEngine implements Engine {
   t = 0;
+  /** Whether the device runs; a test can start it suspended and let a gesture's resume() start it. */
+  up = true;
+  allowResume = true;
   started: SoundId[] = [];
   suspended = 0;
   resumed = 0;
@@ -26,6 +29,10 @@ class FakeEngine implements Engine {
   }
   resume() {
     this.resumed++;
+    if (this.allowResume) this.up = true;
+  }
+  running() {
+    return this.up;
   }
 }
 
@@ -125,6 +132,7 @@ describe("the sound facade", () => {
     audio.suspend();
     expect(engine.suspended).toBe(1);
     expect(engine.stops).toBe(1);
+    engine.t += 1; // past the cooldown, so only the pause can be what keeps it silent
     audio.feed(pop, []);
     expect(engine.started).toHaveLength(1);
     audio.resume();
@@ -132,6 +140,36 @@ describe("the sound facade", () => {
     engine.t += 1;
     audio.feed(pop, []);
     expect(engine.started).toHaveLength(2);
+  });
+
+  it("does not send sounds to a device that is not running, and runs them after a gesture has started it", async () => {
+    const { audio, engine } = make();
+    engine.up = false;
+    engine.allowResume = false; // the browser refuses the resume made when the context was made
+    audio.unlock();
+    await flush();
+    expect(audio.ready()).toBe(true);
+    expect(audio.running()).toBe(false);
+    audio.feed(pop, []);
+    expect(engine.started).toEqual([]); // not queued for a burst later
+    engine.allowResume = true;
+    audio.unlock(); // the next gesture asks again, inside the gesture
+    expect(engine.resumed).toBe(1);
+    expect(audio.running()).toBe(true);
+    audio.feed(pop, []);
+    expect(engine.started).toEqual(["bumperPop"]);
+    audio.unlock();
+    expect(engine.resumed).toBe(1); // a running device is left alone
+  });
+
+  it("does not ask a device to run while the game is paused", async () => {
+    const { audio, engine } = make();
+    audio.unlock();
+    await flush();
+    audio.suspend();
+    engine.up = false;
+    audio.unlock();
+    expect(engine.resumed).toBe(0);
   });
 
   it("does nothing, and does not throw, when suspend, resume and feed come before it is open", () => {
@@ -147,14 +185,17 @@ describe("the sound facade", () => {
     const { audio, engine, store } = make();
     audio.unlock();
     await flush();
+    audio.feed(pop, []);
     expect(audio.toggleMute()).toBe(true);
+    expect(engine.stops).toBe(1); // the pop that was playing is cut
     await flush();
     expect(parseSettings(await store.get(AUDIO_KEY))).toMatchObject({ mute: true });
+    engine.t += 1;
     audio.feed(pop, []);
-    expect(engine.started).toEqual([]);
+    expect(engine.started).toEqual(["bumperPop"]); // still only the first one: a muted game is silent
     expect(audio.toggleMute()).toBe(false);
     audio.feed(pop, []);
-    expect(engine.started).toEqual(["bumperPop"]);
+    expect(engine.started).toEqual(["bumperPop", "bumperPop"]);
   });
 
   it("starts with the settings of the last visit", async () => {
@@ -163,6 +204,18 @@ describe("the sound facade", () => {
     const audio = createAudio(store, { load: async () => ({ createEngine: () => new FakeEngine() }), available: () => true });
     await flush();
     expect(audio.settings()).toEqual({ vol: 0.2, mute: true });
+  });
+
+  it("keeps the stored volume when M is pressed before the stored settings have arrived, and the player's mute wins", async () => {
+    let answer: (t: string) => void = () => undefined;
+    const saved: string[] = [];
+    const store = { get: () => new Promise<string | null>((r) => void (answer = r)), set: async (_k: string, v: string) => void saved.push(v) };
+    const audio = createAudio(store, { load: async () => ({ createEngine: () => new FakeEngine() }), available: () => true });
+    expect(audio.toggleMute()).toBe(true); // before the store has answered
+    answer(serializeSettings({ vol: 0.2, mute: false }));
+    await flush();
+    expect(audio.settings()).toEqual({ vol: 0.2, mute: true });
+    expect(saved.map((t) => parseSettings(t))).toEqual([{ vol: 0.2, mute: true }]); // not the default volume
   });
 
   it("survives a store that cannot read or write", async () => {

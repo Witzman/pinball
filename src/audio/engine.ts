@@ -7,7 +7,10 @@ import type { SoundId, Voice } from "./voices";
 
 export interface Engine extends Backend {
   suspend(): void;
+  /** Asks the device to run; call it from a user gesture (Safari insists). */
   resume(): void;
+  /** True while the device is running; a suspended one has a frozen clock, so nothing is sent to it. */
+  running(): boolean;
 }
 
 /** The slice of AudioContext this engine uses; a test can supply a fake. */
@@ -48,12 +51,14 @@ export function createEngine(make: ContextFactory = () => new AudioContext()): E
   const buffers = { white: noiseBuffer(ctx, "white"), brown: noiseBuffer(ctx, "brown") };
   let nextHandle = 1;
   const voices = new Map<number, GainNode[]>();
+  void ctx.resume(); // may be refused outside a gesture: the next gesture asks again
 
   return {
     now: () => ctx.currentTime,
     start(_id: SoundId, voice: Voice, gain: number, rate: number, at: number): number {
       const handle = nextHandle++;
       const gains: GainNode[] = [];
+      let alive = voice.layers.length;
       for (const layer of voice.layers) {
         const t0 = at + (layer.at ?? 0);
         const { a, peak, d } = layer.env;
@@ -90,6 +95,7 @@ export function createEngine(make: ContextFactory = () => new AudioContext()): E
         src.onended = () => {
           src.disconnect();
           g.disconnect();
+          if (--alive === 0) voices.delete(handle); // the voice is over: forget it
         };
         gains.push(g);
       }
@@ -105,5 +111,6 @@ export function createEngine(make: ContextFactory = () => new AudioContext()): E
     },
     suspend: () => void ctx.suspend(),
     resume: () => void ctx.resume(),
+    running: () => ctx.state === "running",
   };
 }

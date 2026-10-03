@@ -122,5 +122,4 @@ export const MAX_STARTS_PER_FRAME = 6;
 export const MIN_GAIN = 0.02;
 /** A start inside the cooldown still goes through when it is this much louder than the last one. */
 export const LOUDER_FACTOR = 1.5;
-/** An event older than this (a throttled tab) is dropped, in seconds. */
-export const MAX_AGE_S = 0.1;
+

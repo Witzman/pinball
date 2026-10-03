@@ -33,8 +33,17 @@ function fakeContext() {
     createBiquadFilter: () => node("filter", { type: "", Q: { value: 0 }, frequency: param("ffreq") }),
     suspend: () => void log.push("ctx.suspend"),
     resume: () => void log.push("ctx.resume"),
+    state: "suspended",
   };
-  return { ctx: ctx as unknown as AudioContext, log };
+  const made: { onended: null | (() => void) }[] = [];
+  const wrap = (f: () => { onended: null | (() => void) }) => () => {
+    const n = f();
+    made.push(n);
+    return n;
+  };
+  ctx.createOscillator = wrap(ctx.createOscillator as never) as never;
+  ctx.createBufferSource = wrap(ctx.createBufferSource as never) as never;
+  return { ctx: ctx as unknown as AudioContext, log, made };
 }
 
 describe("the Web Audio engine", () => {
@@ -83,6 +92,29 @@ describe("the Web Audio engine", () => {
     e.resume();
     expect(log).toContain("ctx.suspend");
     expect(log).toContain("ctx.resume");
+  });
+
+  it("asks the device to run when it is made, and says whether it runs", () => {
+    const { ctx, log } = fakeContext();
+    const e = createEngine(() => ctx);
+    expect(log).toContain("ctx.resume");
+    expect(e.running()).toBe(false);
+    (ctx as unknown as { state: string }).state = "running";
+    expect(e.running()).toBe(true);
+  });
+
+  it("forgets a voice when its sources have ended, so nothing piles up", () => {
+    const { ctx, log, made } = fakeContext();
+    const e = createEngine(() => ctx);
+    const h = e.start("warn", VOICES.warn, 1, 1, 1);
+    for (const n of made) n.onended?.(); // both layers are over
+    log.length = 0;
+    e.stop(h, 2); // nothing left to fade
+    expect(log).toEqual([]);
+    const h2 = e.start("warn", VOICES.warn, 1, 1, 1);
+    log.length = 0;
+    e.stop(h2, 2); // a voice still playing is faded
+    expect(log.length).toBeGreaterThan(0);
   });
 
   it("makes the noise from fixed seeds: two engines have the same noise", () => {

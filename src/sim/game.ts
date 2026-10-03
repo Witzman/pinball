@@ -147,7 +147,8 @@ export function setPaused(g: Game, paused: boolean): void {
 
 const AUDIO_CAP = 512;
 function audio(g: Game, e: AudioEvent): void {
-  if (g.audioOut.length < AUDIO_CAP) g.audioOut.push(e);
+  if (g.audioOut.length >= AUDIO_CAP) g.audioOut.shift(); // in a storm the newest matter: the drain comes last
+  g.audioOut.push(e);
 }
 
 function applyInput(g: Game): void {
@@ -245,7 +246,7 @@ export function tick(g: Game): void {
     const sw = g.table.switchNames[c.sw[i]! - 1]!;
     const kind = KINDS[c.kind[i]! as keyof typeof KINDS];
     events.push({ t: "switch", tick: t, ball: c.ball[i]!, sw, kind, impulse: c.impulse[i]! });
-    const cls = g.table.sounds[sw];
+    const cls = Object.hasOwn(g.table.sounds, sw) ? g.table.sounds[sw] : undefined;
     const s = Math.min(1, c.impulse[i]! / (g.table.ballMass * FULL_STRENGTH_SPEED));
     audio(g, { a: "switch", sw, kind: kind === "gateAB" || kind === "gateBA" ? "gate" : kind, s, ...(cls !== undefined ? { cls } : {}) });
   }

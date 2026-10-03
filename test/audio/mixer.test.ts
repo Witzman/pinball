@@ -63,10 +63,18 @@ describe("the mixer", () => {
     expect(mx.play({ id: "ballHit", s: 0.1 })).toBe(true);
   });
 
-  it("drops a start below the minimum gain, and everything when the master is muted", () => {
-    const quiet = setup(() => 0.01);
-    expect(quiet.mx.play({ id: "wallTick", s: 0 })).toBe(false);
-    expect(0.2 * 0.01).toBeLessThan(MIN_GAIN);
+  it("drops a voice that is too quiet by its own gain, but a low volume only makes sounds softer", () => {
+    const low = setup(() => 0.05);
+    expect(low.mx.play({ id: "wallTick", s: 0 })).toBe(true); // 0.2 at the voice, 0.01 out: still played
+    expect(low.be.started[0]!.gain).toBeCloseTo(0.01, 12);
+    const tiny = { ...VOICES.wallTick, gain: [MIN_GAIN / 2, MIN_GAIN / 2] as [number, number] };
+    const saved = VOICES.wallTick;
+    (VOICES as Record<string, unknown>).wallTick = tiny;
+    try {
+      expect(setup().mx.play({ id: "wallTick", s: 0 })).toBe(false);
+    } finally {
+      (VOICES as Record<string, unknown>).wallTick = saved;
+    }
     const muted = setup(() => 0);
     expect(muted.mx.play({ id: "drain", s: 1 })).toBe(false);
     expect(muted.be.started).toEqual([]);
@@ -97,10 +105,12 @@ describe("the mixer", () => {
     it("steals the lowest priority first, for a sound of the same or higher priority", () => {
       const be = new Fake();
       const mx = small(be);
-      mx.play({ id: "wallTick", s: 1 }); // prio 0, handle 1
-      mx.play({ id: "bumperPop", s: 1 }); // prio 1, handle 2
-      expect(mx.play({ id: "rollover", s: 1 })).toBe(true); // prio 1 takes the place of the tick
-      expect(be.stopped).toEqual([1]);
+      mx.play({ id: "bumperPop", s: 1 }); // prio 1, handle 1: the older
+      be.t = 0.01;
+      mx.play({ id: "wallTick", s: 1 }); // prio 0, handle 2: the newer, but the lowest priority
+      be.t = 0.02;
+      expect(mx.play({ id: "rollover", s: 1 })).toBe(true); // prio 1 takes the place of the tick, not of the older pop
+      expect(be.stopped).toEqual([2]);
     });
 
     it("steals the oldest of equal priority", () => {
