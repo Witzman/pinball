@@ -31,11 +31,12 @@ export const demoTable: TableDef = {
     { type: "segment", a: [40, 600], b: [40, 300], material: "metal", zones: [1] },
     { type: "segment", a: [100, 600], b: [100, 300], material: "metal", zones: [1] },
     // a standup target, a little slanted: a ball dropped on a flat one would rest on it for ever
-    { type: "segment", a: [300, 490], b: [380, 510], material: "rubber", switch: "target1" },
+    { type: "segment", a: [300, 490], b: [380, 510], material: "rubber", switch: "target1", kick: { speed: 1.6, minHit: 0.4, cooldownMs: 40 } },
   ],
   posts: [
-    { at: [200, 400], r: 12, material: "rubber" },
-    { at: [320, 420], r: 12, material: "rubber" },
+    // pop bumpers: they push the ball away
+    { at: [200, 400], r: 12, material: "rubber", switch: "bumper1", kick: { speed: 2, minHit: 0.3, cooldownMs: 30 } },
+    { at: [320, 420], r: 12, material: "rubber", switch: "bumper2", kick: { speed: 2, minHit: 0.3, cooldownMs: 30 } },
   ],
   // a ramp: up from its mouth at y=600 to its exit at y=300; the gates join the playfield (zone 0) and the ramp (zone 1)
   gates: [

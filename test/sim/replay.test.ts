@@ -63,14 +63,16 @@ describe("replay runner", () => {
     }
   });
 
-  it("makes the ball meet the flippers in the shipped replays: in the 800 ticks after the first flipper input the ball is at some moment elsewhere than without them", () => {
+  it("makes the ball meet the flippers in the shipped replays: while the flippers are being played the ball is at some moment elsewhere than without them", () => {
     for (const n of ["launch-and-flip", "flipper-hammering"]) {
       const r = file(n);
       const plungeOnly = { ...r, inputs: r.inputs.filter((i) => i.action.startsWith("plunge")) };
       let apart = 0;
-      const first = r.inputs.find((i) => !i.action.startsWith("plunge"))!.tick;
-      // from the first flipper input on, every 25 ticks: the ball may be gone again a few hundred ticks later
-      for (let ticks = first + 25; ticks <= Math.min(r.header.ticks, first + 800); ticks += 25) {
+      const flips = r.inputs.filter((i) => !i.action.startsWith("plunge"));
+      const first = flips[0]!.tick;
+      const last = flips[flips.length - 1]!.tick;
+      // from the first flipper input to a little after the last, every 100 ticks: after a hit the two runs stay apart for hundreds of ticks
+      for (let ticks = first + 100; ticks <= Math.min(r.header.ticks, last + 800); ticks += 100) {
         const upTo = (x: typeof r) => ({ header: { ...r.header, ticks }, inputs: x.inputs.filter((i) => i.tick < ticks) });
         const a = runReplay(upTo(r), allTables).game.table.world.balls[0]!;
         const b = runReplay(upTo(plungeOnly), allTables).game.table.world.balls[0]!;
