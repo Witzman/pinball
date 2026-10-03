@@ -424,6 +424,7 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
       b.toFeed = Math.max(0, b.toFeed - 1);
       state.shots = {}; // a sequence started with the last ball means nothing for the next
     }
+    if (e.t === "nudge") return; // the flow counts nudges for the tilt (#20, step 2); table scripts never see them
     if (flow) {
       if (flow.consumes(e)) {
         flow.press(e);

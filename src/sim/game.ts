@@ -1,6 +1,6 @@
 import type { Ball } from "../core/types";
 import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_TRIGGER } from "../core/types";
-import { kickHeld, step } from "../core/step";
+import { kickHeld, nudge as shove, step } from "../core/step";
 import { createRules, freePlay } from "../rules";
 import type { Command, Machine, Rules, RulesEvent, TableSetup } from "../rules";
 
@@ -49,6 +49,9 @@ export interface Game {
   pressed: GameInput;
   /** Balls put on the plunger whose arrival the rules have not heard of yet. */
   arrivals: number;
+  /** A nudge waiting for the next tick, and the tick the last one was applied (-cooldown: none yet). */
+  pendingNudge: NudgeDir | null;
+  lastNudge: number;
   /** Scratch lists reused every tick. */
   events: RulesEvent[];
   cmds: Command[];
@@ -61,6 +64,15 @@ export interface GameOptions extends TableSetup {
   /** What the machine remembers (credits, scores); only with a flow. */
   machine?: Machine;
 }
+
+/** Which way a nudge shoves: the way the balls move (the table is shoved the other way). */
+export type NudgeDir = "left" | "right" | "up";
+/** Velocity change of a nudge, m/s. Guesses: gravity on the demo table is about 1.1 m/s^2; there is no QA to tune them. */
+const NUDGE_SIDE = 0.25;
+const NUDGE_UP = 0.15;
+/** Ticks after a nudge in which the next one is dropped. */
+const NUDGE_COOLDOWN = 250;
+const NUDGES: Record<NudgeDir, readonly [number, number]> = { left: [NUDGE_SIDE, 0], right: [-NUDGE_SIDE, 0], up: [0, NUDGE_UP] };
 
 /** One physics tick in milliseconds; a longer frame is cut to MAX_FRAME_MS. */
 const TICK_MS = 1;
@@ -80,7 +92,7 @@ export function createGame(def: TableDef, opts: GameOptions = {}): Game {
   const idle = (): GameInput => ({ left: false, right: false, plunge: false, coin: false, start: false, buyin: false });
   const g: Game = {
     table, input: idle(), paused: false, accMs: 0, drains: 0,
-    rules, setup: { def, options: opts }, errors: [], errorCount: 0, errorStreak: 0, calmTicks: 0, broken: null, applied: 0, outbox: [], pressed: idle(), arrivals: 0, events: [], cmds: [], drained: [],
+    rules, setup: { def, options: opts }, errors: [], errorCount: 0, errorStreak: 0, calmTicks: 0, broken: null, applied: 0, outbox: [], pressed: idle(), arrivals: 0, pendingNudge: null, lastNudge: -NUDGE_COOLDOWN, events: [], cmds: [], drained: [],
   };
   if (!opts.flow) {
     // free play: a ball waits on the plunger. With a flow the first ball comes when a game starts.
@@ -112,6 +124,17 @@ export function setMagnet(g: Game, id: string, on: boolean): void {
   const mi = g.table.magnetIds.indexOf(id);
   if (mi < 0) throw new Error(`unknown magnet "${id}"`);
   g.table.world.magnets[mi]!.on = on;
+}
+
+/**
+ * Asks for a nudge: it is applied at the start of the next tick, to every free ball.
+ * Dropped (false) while another is waiting, the last one was less than the cooldown ago,
+ * or the game is paused or broken (a nudge made then would fire on the first tick after).
+ */
+export function nudge(g: Game, dir: NudgeDir): boolean {
+  if (g.paused || g.broken !== null || g.pendingNudge !== null || g.table.world.tick - g.lastNudge < NUDGE_COOLDOWN) return false;
+  g.pendingNudge = dir;
+  return true;
 }
 
 export function setPaused(g: Game, paused: boolean): void {
@@ -177,12 +200,22 @@ function applyCommands(g: Game, cmds: readonly Command[]): void {
 export function tick(g: Game): void {
   const w = g.table.world;
   applyInput(g);
+  let nudged: NudgeDir | null = null;
+  if (g.pendingNudge !== null) {
+    const [dvx, dvy] = NUDGES[g.pendingNudge];
+    if (shove(w, dvx, dvy) > 0) {
+      nudged = g.pendingNudge;
+      g.lastNudge = w.tick; // a shove nobody felt does not start the cooldown
+    }
+    g.pendingNudge = null;
+  }
   step(w);
   const t = w.tick;
   const events = g.events;
   events.length = 0;
   for (; g.arrivals > 0; g.arrivals--) events.push({ t: "ballAtPlunger", tick: t });
   buttonEvents(g, t, events);
+  if (nudged !== null) events.push({ t: "nudge", tick: t, dir: nudged });
   const c = w.contacts;
   for (let i = 0; i < c.n; i++) {
     events.push({ t: "switch", tick: t, ball: c.ball[i]!, sw: g.table.switchNames[c.sw[i]! - 1]!, kind: KINDS[c.kind[i]! as keyof typeof KINDS], impulse: c.impulse[i]! });
@@ -249,6 +282,8 @@ export function recover(g: Game, error: unknown): void {
   g.cmds.length = 0;
   g.drained.length = 0;
   g.arrivals = 0;
+  g.pendingNudge = null;
+  g.lastNudge = -NUDGE_COOLDOWN;
   if (!options.flow) {
     w.balls.push(newBall(g));
     g.arrivals = 1;

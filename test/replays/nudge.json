@@ -1,0 +1,11 @@
+{
+  "header": { "format": 1, "tableId": "demo", "dt": 0.001, "seed": 1, "ticks": 4000 },
+  "inputs": [
+    { "tick": 300, "action": "plunge_down" },
+    { "tick": 700, "action": "plunge_up" },
+    { "tick": 1500, "action": "nudge_left" },
+    { "tick": 2000, "action": "nudge_up" },
+    { "tick": 2100, "action": "nudge_right" },
+    { "tick": 3000, "action": "nudge_right" }
+  ]
+}

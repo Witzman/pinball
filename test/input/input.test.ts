@@ -33,6 +33,15 @@ describe("keyboard", () => {
     }
   });
 
+  it("reports a nudge direction on the key down of A, D and W, and nothing on key up", () => {
+    const s = fresh();
+    expect(applyKey(s, "KeyA", true)).toBe("left");
+    expect(applyKey(s, "KeyD", true)).toBe("right");
+    expect(applyKey(s, "KeyW", true)).toBe("up");
+    for (const k of ["KeyA", "KeyD", "KeyW"]) expect(applyKey(s, k, false), k).toBeUndefined();
+    expect(s).toEqual(fresh()); // a nudge is one shot: no held state
+  });
+
   it("reports pause only on key down, and ignores unknown keys", () => {
     const s = fresh();
     expect(applyKey(s, "KeyP", true)).toBe("pause");
@@ -164,6 +173,117 @@ describe("button latch", () => {
       expect(l.update(fresh())[b], b).toBe(true);
       expect(l.frameDone()[b], b).toBe(false);
     }
+  });
+});
+
+describe("swipes", () => {
+  const W = 400;
+  const H = 800;
+  // the free band is 12% to 50% of the height: y 96 to 400
+  const swipe = (from: [number, number], to: [number, number], ms = 100) => {
+    const t = new TouchTracker(W, H);
+    t.down(1, from[0], from[1], 1000);
+    return t.move(1, to[0], to[1], 1000 + ms);
+  };
+
+  it("makes a nudge of a quick swipe left, right and up, from the free band", () => {
+    expect(swipe([300, 250], [200, 250])).toBe("left");
+    expect(swipe([100, 250], [200, 250])).toBe("right");
+    expect(swipe([200, 350], [200, 250])).toBe("up");
+  });
+
+  it("ignores a swipe down", () => {
+    expect(swipe([200, 150], [200, 280])).toBeNull();
+  });
+
+  it("needs enough travel: 30 px or 6% of the short side, whichever is more", () => {
+    expect(swipe([200, 250], [176, 250])).toBeNull(); // 24 px: under 30 and under 6% of 400 = 24
+    expect(swipe([200, 250], [175, 250])).toBeNull(); // 25 px
+    expect(swipe([200, 250], [169, 250])).toBe("left"); // 31 px
+    const wide = new TouchTracker(1000, 600); // short side 600: 36 px
+    wide.down(1, 500, 200, 0);
+    expect(wide.move(1, 468, 200, 50)).toBeNull(); // 32 px
+    expect(wide.move(1, 463, 200, 60)).toBe("left"); // 37 px
+  });
+
+  it("needs to be quick: after 300 ms it is a drag, and stays one", () => {
+    const t = new TouchTracker(W, H);
+    t.down(1, 300, 250, 0);
+    expect(t.move(1, 250, 250, 301)).toBeNull();
+    expect(t.move(1, 100, 250, 310)).toBeNull(); // still no: it already lost
+    const ok = new TouchTracker(W, H);
+    ok.down(1, 300, 250, 0);
+    expect(ok.move(1, 250, 250, 300)).toBe("left"); // exactly 300 ms
+  });
+
+  it("wants one clear axis: a diagonal waits, and may still become a swipe", () => {
+    const t = new TouchTracker(W, H);
+    t.down(1, 300, 300, 0);
+    expect(t.move(1, 250, 250, 50)).toBeNull(); // 50 across, 50 up: no clear axis
+    expect(t.move(1, 200, 240, 100)).toBe("left"); // 100 across, 60 up: 100 >= 1.5 * 60
+  });
+
+  it("fires once per finger, then is spent until it lifts", () => {
+    const t = new TouchTracker(W, H);
+    t.down(1, 300, 250, 0);
+    expect(t.move(1, 200, 250, 50)).toBe("left");
+    expect(t.move(1, 100, 250, 80)).toBeNull();
+    t.up(1);
+    t.down(1, 300, 250, 500);
+    expect(t.move(1, 200, 250, 550)).toBe("left");
+  });
+
+  it("never swipes from the machine band or from the flipper half", () => {
+    expect(swipe([300, 40], [150, 40])).toBeNull(); // coin/start band
+    expect(swipe([300, 600], [150, 600])).toBeNull(); // flipper zone
+    expect(swipe([300, 450], [150, 450])).toBeNull(); // just below the free band
+    expect(swipe([200, 98], [50, 98])).toBe("left"); // just inside it
+  });
+
+  it("presses no button with a finger that began in the free band, wherever its swipe ends", () => {
+    const up = new TouchTracker(W, H);
+    up.down(1, 300, 110, 0); // just inside the free band (y 96 and more)
+    up.move(1, 300, 60, 50); // swiped up into the machine band: start
+    expect(up.state()).toEqual(fresh());
+    const toFlipper = new TouchTracker(W, H);
+    toFlipper.down(1, 100, 390, 0);
+    toFlipper.move(1, 100, 500, 50); // swiped down into the flipper half
+    expect(toFlipper.state()).toEqual(fresh());
+    const still = new TouchTracker(W, H);
+    still.down(1, 300, 200, 0);
+    expect(still.state()).toEqual(fresh());
+  });
+
+  it("still lets a second finger from the lower half hold its flipper while one swipes", () => {
+    const t = new TouchTracker(W, H);
+    t.down(1, 300, 200, 0);
+    t.down(2, 50, 700, 0);
+    t.move(1, 200, 200, 50);
+    expect(t.state()).toEqual({ ...fresh(), left: true });
+  });
+
+  it("does not let a finger that drifts up from a flipper make a nudge", () => {
+    const t = new TouchTracker(W, H);
+    t.down(1, 100, 700, 0);
+    expect(t.move(1, 100, 300, 100)).toBeNull();
+  });
+
+  it("keeps holding the flipper while a finger from the lower half moves, and ignores unknown fingers", () => {
+    const t = new TouchTracker(W, H);
+    t.down(1, 50, 700, 0);
+    t.move(1, 60, 710, 10);
+    expect(t.state().left).toBe(true);
+    expect(t.move(9, 0, 0, 0)).toBeNull();
+  });
+
+  it("forgets a finger that was lifted or cleared", () => {
+    const t = new TouchTracker(W, H);
+    t.down(1, 300, 250, 0);
+    t.up(1);
+    expect(t.move(1, 100, 250, 20)).toBeNull();
+    t.down(2, 300, 250, 0);
+    t.clear();
+    expect(t.move(2, 100, 250, 20)).toBeNull();
   });
 });
 

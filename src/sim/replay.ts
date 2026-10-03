@@ -2,7 +2,8 @@ import { hashWorld } from "../core/hash";
 import { DT } from "../core/step";
 import type { TableDef } from "../table/schema";
 import { hashRules } from "../rules";
-import { createGame, takeCommands, tick } from "./game";
+import { createGame, nudge, takeCommands, tick } from "./game";
+import type { NudgeDir } from "./game";
 import type { TableSetup } from "./game";
 import type { Game } from "./game";
 
@@ -10,6 +11,8 @@ import type { Game } from "./game";
 export const ACTIONS = [
   "left_down", "left_up", "right_down", "right_up", "plunge_down", "plunge_up",
   "coin_down", "coin_up", "start_down", "start_up", "buyin_down", "buyin_up",
+  // one-shot: there is no release
+  "nudge_left", "nudge_right", "nudge_up",
 ] as const;
 export type ReplayAction = (typeof ACTIONS)[number];
 
@@ -78,6 +81,10 @@ export function validateReplay(r: unknown): string[] {
 }
 
 function press(g: Game, action: ReplayAction): void {
+  if (action.startsWith("nudge_")) {
+    nudge(g, action.slice(6) as NudgeDir);
+    return;
+  }
   const down = action.endsWith("_down");
   const button = action.slice(0, action.lastIndexOf("_")) as "left" | "right" | "plunge" | "coin" | "start" | "buyin";
   g.input[button] = down;

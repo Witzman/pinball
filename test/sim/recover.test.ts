@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advance, createGame, recover, takeCommands, tick } from "../../src/sim/game";
+import { advance, createGame, nudge, recover, takeCommands, tick } from "../../src/sim/game";
 import type { FlowConfig, TableRules } from "../../src/rules";
 import { demoTable } from "../../src/tables/demo";
 import { saucerTable } from "./fixtures";
@@ -138,6 +138,19 @@ describe("a tick that throws", () => {
     expect(g.errorCount).toBe(0);
     expect(g.errors).toEqual([]);
     expect(g.rules.state.game!.phase).toBe("play");
+  });
+});
+
+describe("a recovery and the nudge", () => {
+  it("forgets a nudge that was waiting and the cooldown of the last one", () => {
+    const g = createGame(demoTable);
+    expect(nudge(g, "left")).toBe(true);
+    tick(g);
+    expect(nudge(g, "up")).toBe(false); // cooling
+    g.pendingNudge = "right"; // one more waiting
+    recover(g, new Error("boom"));
+    expect(g.pendingNudge).toBeNull();
+    expect(nudge(g, "up")).toBe(true); // no cooldown carried over
   });
 });
 
