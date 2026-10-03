@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { applyKey, TouchTracker, touchZone } from "../../src/input/input";
 import type { GameInput } from "../../src/sim/game";
 
-const fresh = (): GameInput => ({ left: false, right: false, plunge: false });
+const fresh = (): GameInput => ({ left: false, right: false, plunge: false, coin: false, start: false, buyin: false });
 
 describe("keyboard", () => {
   it("holds a flipper while its key is down", () => {
     const s = fresh();
     applyKey(s, "ShiftLeft", true);
     applyKey(s, "ShiftRight", true);
-    expect(s).toEqual({ left: true, right: true, plunge: false });
+    expect(s).toEqual({ ...fresh(), left: true, right: true, plunge: false });
     applyKey(s, "ShiftLeft", false);
     expect(s.left).toBe(false);
     expect(s.right).toBe(true);
@@ -55,9 +55,9 @@ describe("touch tracker", () => {
     const t = new TouchTracker(400, 800);
     t.down(1, 50, 700);
     t.down(2, 250, 700);
-    expect(t.state()).toEqual({ left: true, right: true, plunge: false });
+    expect(t.state()).toEqual({ ...fresh(), left: true, right: true, plunge: false });
     t.up(1);
-    expect(t.state()).toEqual({ left: false, right: true, plunge: false });
+    expect(t.state()).toEqual({ ...fresh(), left: false, right: true, plunge: false });
     t.up(2);
     expect(t.state()).toEqual(fresh());
   });
@@ -66,7 +66,7 @@ describe("touch tracker", () => {
     const t = new TouchTracker(400, 800);
     t.down(1, 50, 700);
     t.move(1, 250, 700);
-    expect(t.state()).toEqual({ left: false, right: true, plunge: false });
+    expect(t.state()).toEqual({ ...fresh(), left: false, right: true, plunge: false });
   });
 
   it("follows a resize", () => {

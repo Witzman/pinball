@@ -37,7 +37,7 @@ export function harness(table: TableRules, opts: Partial<RulesOptions> = {}) {
       push({ t: "switch", tick: cursor, ball, sw, kind, impulse });
       return h;
     },
-    button(button: "left" | "right" | "plunge", down: boolean) {
+    button(button: "left" | "right" | "plunge" | "coin" | "start" | "buyin", down: boolean) {
       push({ t: "button", tick: cursor, button, down });
       return h;
     },

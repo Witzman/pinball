@@ -40,7 +40,7 @@ function compute(): Record<string, number> {
   }
   // a sinkhole scenario with rules: capture, lock, timed release, seeded random
   for (const seed of [5, 6]) {
-    const r = runReplay(saucerReplay(seed), [saucerTable], { "saucer-demo": saucerRules });
+    const r = runReplay(saucerReplay(seed), [saucerTable], { "saucer-demo": { rules: saucerRules } });
     out[`rules/saucer-seed${seed}`] = r.hash;
     out[`rules/saucer-seed${seed}/rules`] = r.rulesHash;
   }

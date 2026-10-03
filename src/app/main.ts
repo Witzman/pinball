@@ -13,7 +13,7 @@ const ctx: CanvasRenderingContext2D = context;
 const banner = document.getElementById("banner");
 
 const game = createGame(demoTable);
-const keys: GameInput = { left: false, right: false, plunge: false };
+const keys: GameInput = { left: false, right: false, plunge: false, coin: false, start: false, buyin: false };
 const touch = new TouchTracker(innerWidth, innerHeight);
 
 function resize(): void {

@@ -49,7 +49,7 @@ export class TouchTracker {
     this.pointers.clear();
   }
   state(): GameInput {
-    const s: GameInput = { left: false, right: false, plunge: false };
+    const s: GameInput = { left: false, right: false, plunge: false, coin: false, start: false, buyin: false };
     for (const [x, y] of this.pointers.values()) {
       const z = touchZone(x, y, this.w, this.h);
       if (z) s[z] = true;

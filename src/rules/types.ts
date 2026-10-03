@@ -8,7 +8,7 @@ import type { TableDef } from "../table/schema";
 /** What the physics and the input layer tell the rules. Names, never numeric ids. */
 export type RulesEvent =
   | { t: "switch"; tick: number; ball: number; sw: string; kind: "hit" | "gateAB" | "gateBA" | "trigger" | "capture"; impulse: number }
-  | { t: "button"; tick: number; button: "left" | "right" | "plunge"; down: boolean }
+  | { t: "button"; tick: number; button: "left" | "right" | "plunge" | "coin" | "start" | "buyin"; down: boolean }
   | { t: "drain"; tick: number; ball: number }
   | { t: "ballAtPlunger"; tick: number }
   // made by the engine itself:
@@ -33,6 +33,10 @@ export type Command =
   | { c: "lockBall"; ball: number; lock: string }
   | { c: "feedBall"; feed: string }
   | { c: "dmd"; show: Cue }
+  /** The credit count changed; `n` is the new total. */
+  | { c: "credits"; n: number }
+  /** A game ended with this score (`bought`: it ended with bought-in balls). */
+  | { c: "gameOver"; score: number; bought: boolean }
   | { c: "sound"; play: string; vol?: number };
 
 /** A shot is off, lit, or collected: almost every reward is "light, then collect". */
@@ -66,6 +70,19 @@ export interface BallMgr {
   capacity: number;
 }
 
+/** The game around the balls; present only when the table runs with a flow (see flow.ts). */
+export interface GameState {
+  phase: "attract" | "play" | "bonus" | "over" | "buyin";
+  credits: number;
+  /** Balls still to be served again without losing a ball number (saver, extra balls). */
+  shootAgain: number;
+  bought: boolean;
+  tilted: boolean;
+  replayDone: boolean;
+  /** Scores of the machine, highest first. */
+  board: { main: number[]; bought: number[] };
+}
+
 /** A shot partway through its switch sequence: `i` switches seen, the first at tick `at`. */
 export interface ShotProgress {
   i: number;
@@ -85,6 +102,9 @@ export interface RulesState {
   shots: Record<string, ShotProgress>;
   modes: Record<string, ModeState>;
   balls: BallMgr;
+  /** Null when the table has no flow (free play). */
+  game: GameState | null;
+  /** `persist` is reserved for per-player values (#11 later); nothing writes it yet. */
   player: { score: number; ballNo: number; persist: Record<string, number> };
 }
 
@@ -127,7 +147,7 @@ export interface ModeDef {
 /** What `src/tables/<id>/rules.ts` returns. */
 export interface TableRules {
   modes: Record<string, ModeDef>;
-  /** Names of lamps, counters and player values that survive from one ball to the next. */
+  /** Names of lamps and counters that survive from one ball to the next (a new game clears them too). */
   persist?: string[];
   onSwitch?(c: Ctx, e: SwitchEvent): void;
   onShot?(c: Ctx, shot: string, e: SwitchEvent): void;
