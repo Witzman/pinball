@@ -6,6 +6,22 @@ import { backglassTexture, drawDisplay, glowTexture, playfieldTexture, studioSky
 import { fitDistance } from "./frame";
 import { rampGeometry } from "./ramp";
 import rampPlasticUrl from "./assets/ramp-plastic.webp";
+import rampPlasticPhotoUrl from "./assets/ramp-plastic-photo.webp";
+import rampPlasticHyperUrl from "./assets/ramp-plastic-hyper.webp";
+import playfieldUrl from "./assets/playfield-colony.webp";
+import playfieldPhotoUrl from "./assets/playfield-colony-photo.webp";
+import playfieldHyperUrl from "./assets/playfield-colony-hyper.webp";
+
+/** The three looks of the generated art (#45), chosen by ?art=painted|photo|hyper; painted is the default. */
+const ART = {
+  painted: { playfield: playfieldUrl, ramp: rampPlasticUrl },
+  photo: { playfield: playfieldPhotoUrl, ramp: rampPlasticPhotoUrl },
+  hyper: { playfield: playfieldHyperUrl, ramp: rampPlasticHyperUrl },
+} as const;
+const artVariant = ((): (typeof ART)[keyof typeof ART] => {
+  const q = typeof location === "undefined" ? null : new URLSearchParams(location.search).get("art");
+  return q && q in ART ? ART[q as keyof typeof ART] : ART.painted;
+})();
 import type { MeshData } from "./ramp";
 
 // The PlayCanvas renderer (issue #45): the same Renderer interface as the canvas placeholder,
@@ -129,7 +145,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     m.opacity = 0.9;
     m.update();
   };
-  rampImage.src = rampPlasticUrl;
+  rampImage.src = artVariant.ramp;
   const glowTex = texture(app.graphicsDevice, glowTexture(), false);
   /** An additive glow: light on the playfield that does not hide what is under it. */
   const glowMaterial = (rgb: [number, number, number], intensity: number): pc.StandardMaterial => {
@@ -210,7 +226,20 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     built = g;
     // the playfield
     const tex = texture(app.graphicsDevice, playfieldTexture(1536, 3072, sceneW, sceneL));
-    const field = add(g, "box", material({ diffuse: [1, 1, 1], map: tex, metal: 0, gloss: 0.55 }));
+    const fieldMat = material({ diffuse: [1, 1, 1], map: tex, metal: 0, gloss: 0.55 });
+    const field = add(g, "box", fieldMat);
+    // the painted playfield of the Colony (an asset, #45, 2 px per mm, laid out to the table's coordinates) replaces the procedural paint on that table once it has loaded; any other table, or a failed load, keeps the procedural one
+    if (Math.abs(sceneW - 0.52) < 1e-6 && Math.abs(sceneL - 1.05) < 1e-6) {
+      const img = new Image();
+      img.onload = () => {
+        if (built !== g) return; // the table was rebuilt meanwhile
+        const t = new pc.Texture(app.graphicsDevice, { width: img.width, height: img.height, format: pc.PIXELFORMAT_SRGBA8, mipmaps: true, minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR, magFilter: pc.FILTER_LINEAR, addressU: pc.ADDRESS_CLAMP_TO_EDGE, addressV: pc.ADDRESS_CLAMP_TO_EDGE });
+        t.setSource(img);
+        fieldMat.diffuseMap = t;
+        fieldMat.update();
+      };
+      img.src = artVariant.playfield;
+    }
     place(field, 0, -0.5, 0, sceneW * S, 1, sceneL * S);
     // rails: a steel wall under a chrome tube
     const joints = new Set<string>();
