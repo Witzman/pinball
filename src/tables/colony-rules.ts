@@ -1,6 +1,6 @@
 import type { FlowConfig, TableRules } from "../rules";
 import { demoFlow } from "./demo-rules";
-import { KICK_ONLY, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
+import { CHAMBER_HOLD, CHAMBER_POINTS, KICK_ONLY, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
 
 /** The proving ground's flow with the Colony's replay score; the rest are still placeholders. */
 export const colonyFlow: FlowConfig = { ...demoFlow, replayScore: REPLAY_SCORE };
@@ -33,6 +33,16 @@ function ramp(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], e: { sw:
   }
 }
 
+/** A ball captured by a chamber is locked, pays, and is let go again after CHAMBER_HOLD ticks. */
+function chamber(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], e: { sw: string; kind: string }): void {
+  if (e.kind !== "capture" || !Object.hasOwn(CHAMBER_POINTS, e.sw)) return;
+  c.ball.lock(e.sw);
+  c.add(`held:${e.sw}`);
+  c.addScore(CHAMBER_POINTS[e.sw]!);
+  c.emit({ c: "dmd", show: { id: e.sw, args: { points: CHAMBER_POINTS[e.sw]! } } });
+  c.after(e.sw, CHAMBER_HOLD);
+}
+
 /**
  * The Colony so far: the skill shot. Each ball lights one of the three lanes up the plunger
  * lane at random (seeded, part of the state); reaching the lit lane before anything else on
@@ -62,6 +72,7 @@ export const colonyRules: TableRules = {
     }
     closeSkill(c);
     ramp(c, e);
+    chamber(c, e);
     const points = Object.hasOwn(SWITCH_POINTS, e.sw) ? SWITCH_POINTS[e.sw]! : 0;
     if (points > 0 && (e.kind === "kick" || !KICK_ONLY.has(e.sw))) c.addScore(points);
   },
@@ -72,8 +83,21 @@ export const colonyRules: TableRules = {
       c.emit({ c: "dmd", show: { id: "superSkillShot", args: { points: SUPER_SKILL_SHOT } } });
     }
   },
+  onTimer(c, id) {
+    if (!Object.hasOwn(CHAMBER_POINTS, id) || c.count(`held:${id}`) === 0) return;
+    c.reset(`held:${id}`);
+    try {
+      c.ball.release(id);
+    } catch {
+      // a tilt let the ball go already: there is nothing to release
+    }
+  },
   onDrain(c) {
     closeSkill(c);
+    for (const id of Object.keys(CHAMBER_POINTS)) {
+      c.reset(`held:${id}`);
+      c.cancel(id);
+    }
     c.reset("leafIn");
     c.reset("rootIn");
   },

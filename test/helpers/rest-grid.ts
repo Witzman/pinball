@@ -45,6 +45,8 @@ export interface RestGridOptions {
   ticks?: number;
   /** Points to leave out (places a ball cannot reach, such as a sealed corner). Points inside a wall are always left out. */
   skip?: (x: number, y: number) => boolean;
+  /** Makes the game for each drop; the default is a plain `createGame(def)`. A table with sinkholes needs its rules, which let the ball out again. */
+  create?: (def: TableDef) => Game;
   /** Changes the table state before each drop: a drop target down, a magnet on, a sinkhole full. */
   setup?: (g: Game) => void;
 }
@@ -60,7 +62,7 @@ export function restGrid(def: TableDef, opts: RestGridOptions = {}): string[] {
   const stuck: string[] = [];
   for (let y = y0; y <= y1; y += dy) {
     for (let x = x0; x <= x1; x += dx) {
-      const g = createGame(def);
+      const g = opts.create ? opts.create(def) : createGame(def);
       if (opts.skip?.(x, y) || insideSolid(g, def, x, y)) continue;
       opts.setup?.(g);
       dropAt(g, x, y);

@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 import { advance, createGame, tick } from "../../src/sim/game";
 import type { Game } from "../../src/sim/game";
 import type { TableRules } from "../../src/rules";
+import { colonyRules } from "../../src/tables/colony-rules";
+import { CHAMBER_HOLD } from "../../src/tables/colony-scoring";
 import { allTables, tableSetups } from "../../src/tables";
 import { colonyTable } from "../../src/tables/colony";
 import { validateTable } from "../../src/table/validate";
 import { dropAt, insideSolid, restGrid } from "../helpers/rest-grid";
 
-/** A game of The Colony in free play that writes down the switches the rules hear, in order. */
+/** A game of The Colony in free play, with its rules, that writes down the switches the rules hear, in order. */
 function play(): { g: Game; seen: string[] } {
   const seen: string[] = [];
-  const rules: TableRules = { modes: {}, onSwitch: (_c, e) => void seen.push(e.sw) };
+  const rules: TableRules = { ...colonyRules, onSwitch: (c, e) => { seen.push(e.sw); colonyRules.onSwitch?.(c, e); } };
   return { g: createGame(colonyTable, { rules }), seen };
 }
 
@@ -43,13 +45,13 @@ describe("The Colony, step 1: the outline", () => {
   });
 
   it("has a skill shot of three lane switches up the plunger lane, and the frozen switch names", () => {
-    expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"] });
+    expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"] });
     const names = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : [])), ...(colonyTable.gates ?? []).flatMap((g) => (g.switch ? [g.switch] : []))].sort();
-    expect(names).toEqual(["bumper1", "bumper2", "bumper3", "inL", "inR", "kickbackL", "leafEnter", "leafExit", "outL", "outR", "rollO", "rollR", "rollW", "rootEnter", "rootExit", "scout", "skill1", "skill2", "skill3", "slingL", "slingR"]);
+    expect(names).toEqual(["brood", "bumper1", "bumper2", "bumper3", "inL", "inR", "kickbackL", "leafEnter", "leafExit", "mushroom", "outL", "outR", "queen", "rollO", "rollR", "rollW", "rootEnter", "rootExit", "scout", "skill1", "skill2", "skill3", "slingL", "slingR"]);
   });
 
   it("lets no ball rest for ever: balls dropped at rest over a grid all drain", () => {
-    expect(restGrid(colonyTable)).toEqual([]);
+    expect(restGrid(colonyTable, { create: (def) => createGame(def, { rules: colonyRules }) })).toEqual([]);
   }, 60000); // about 5 s on a quiet machine: the default 5 s limit failed it under load
 
   /** The switches the rules hear for a plunger pulled for `ms` and then let go, and the ball's track until it drains. */
@@ -366,4 +368,77 @@ describe("The Colony, step 1: the outline", () => {
     expect(sweep([25, 480], "left", "leafRamp"), "upper flipper -> Leaf Ramp").toBeGreaterThan(0);
     expect(sweep([85, 760], "left", "rootRamp"), "left flipper -> Root Ramp").toBeGreaterThan(0);
   }, 120000);
+});
+
+describe("The Colony, step 3b: the chambers", () => {
+  const chambers = ["brood", "queen", "mushroom"] as const;
+  const spot = (id: string): [number, number] => colonyTable.triggers!.find((t) => t.id === id)!.at;
+
+  /** Rolls a ball straight at a chamber from 40 mm above it. */
+  function rollInto(id: string): { g: Game; seen: string[] } {
+    const r = play();
+    const [x, y] = spot(id);
+    Object.assign(r.g.table.world.balls[0]!, { x: x / 1000, y: (y - 40) / 1000, vx: 0, vy: 0.8, zone: 0 });
+    return r;
+  }
+
+  it("pins the chambers' placement and kicks (placeholders: change them on purpose)", () => {
+    expect(colonyTable.triggers!.filter((t) => t.hold).map((t) => [t.id, t.at, t.r, t.hold])).toEqual([
+      ["brood", [85, 665], 12, { kickDeg: -25, kickSpeed: 1.8 }],
+      ["queen", [260, 470], 12, { kickDeg: -110, kickSpeed: 1.6 }],
+      ["mushroom", [244, 555], 12, { kickDeg: 100, kickSpeed: 1.2 }],
+    ]);
+  });
+
+  it("catches a ball that rolls into each chamber, holds it, lets it go after the hold time and the ball leaves the hole", () => {
+    for (const id of chambers) {
+      const { g, seen } = rollInto(id);
+      const [x, y] = spot(id);
+      let held = -1;
+      for (let i = 0; i < 400 && held < 0; i++) {
+        tick(g);
+        if (g.table.world.balls[0]?.hold) held = i;
+      }
+      expect(held, `${id}: caught`).toBeGreaterThanOrEqual(0);
+      expect(seen, id).toContain(id);
+      const b = g.table.world.balls[0]!;
+      expect(Math.hypot(b.x * 1000 - x, b.y * 1000 - y), `${id}: sits at the centre`).toBeLessThan(1e-6);
+      for (let i = 0; i < CHAMBER_HOLD - 50; i++) tick(g);
+      expect(g.table.world.balls[0]!.hold, `${id}: still held before the hold time`).not.toBe(0);
+      for (let i = 0; i < 200; i++) tick(g);
+      expect(g.table.world.balls[0]?.hold ?? 0, `${id}: let go`).toBe(0);
+      for (let i = 0; i < 100; i++) tick(g);
+      const away = Math.hypot(g.table.world.balls[0]!.x * 1000 - x, g.table.world.balls[0]!.y * 1000 - y);
+      expect(away, `${id}: it left the hole`).toBeGreaterThan(30);
+    }
+  });
+
+  it("lets the ball out of each chamber on its way: it drains in the end, and is never caught again by the chamber it left", () => {
+    for (const id of chambers) {
+      const { g, seen } = rollInto(id);
+      expect(drains(g, 40000), id).toBe(true);
+      expect(seen.filter((s) => s === id).length, `${id}: caught once`).toBe(1);
+    }
+  });
+
+  it("can be reached by a flipper: some timing of some flipper puts a ball in each chamber", () => {
+    const sweep = (start: [number, number], button: "left" | "right", want: string) => {
+      let hit = 0;
+      for (let press = 200; press <= 1300; press += 25) {
+        const { g, seen } = play();
+        drop(g, start[0], start[1]);
+        for (let i = 0; i < 4000 && g.table.world.balls.length > 0; i++) {
+          g.input[button] = i >= press && i < press + 100;
+          tick(g);
+        }
+        if (seen.includes(want)) hit++;
+      }
+      return hit;
+    };
+    const starts: [string, [number, number], "left" | "right"][] = [["left flipper", [85, 760], "left"], ["right flipper", [403, 760], "right"], ["upper flipper", [25, 480], "left"]];
+    for (const id of chambers) {
+      const best = Math.max(...starts.map(([, start, button]) => sweep(start, button, id)));
+      expect(best, id).toBeGreaterThan(0);
+    }
+  }, 240000);
 });
