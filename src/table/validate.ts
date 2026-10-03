@@ -141,6 +141,7 @@ export function validateTable(t: TableDef): string[] {
     const where = `flipper "${f.id}"`;
     flipperIds.set(f.id, (flipperIds.get(f.id) ?? 0) + 1);
     if (!(f.material in t.materials)) fail(`${where}: material "${f.material}" is not defined`);
+    if (f.input !== undefined && f.input !== "left" && f.input !== "right") fail(`${where}: input must be "left" or "right"`);
     if (!(f.rBase > 0 && f.rTip > 0)) fail(`${where}: radii must be positive`);
     if (!(f.length > Math.abs(f.rBase - f.rTip))) fail(`${where}: length must exceed the difference of the end radii`);
     if (f.restDeg === f.activeDeg) fail(`${where}: rest and active angle are equal`);

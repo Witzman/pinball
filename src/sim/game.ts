@@ -153,19 +153,18 @@ function audio(g: Game, e: AudioEvent): void {
 
 function applyInput(g: Game): void {
   const w = g.table.world;
-  const l = g.table.flipperIds.indexOf("left");
-  const r = g.table.flipperIds.indexOf("right");
   // a tilted ball is dead: the flippers do not answer (derived from the rules' state, so it survives a recovery);
   // `tilted` stays set until the next serve, so only the play phase is dead, not the attract screen after it
   const game = g.rules.state.game;
   const dead = game?.tilted === true && game.phase === "play";
-  const flip = (i: number, side: "L" | "R", want: boolean) => {
+  for (let i = 0; i < w.flippers.length; i++) {
+    const button = g.table.flipperInputs[i];
+    if (button === null || button === undefined) continue; // a flipper that follows no button
     const f = w.flippers[i]!;
-    if (want !== f.on && !dead) audio(g, { a: "flip", side, up: want }); // the tilt dropping a flipper is not a click
+    const want = !dead && g.input[button];
+    if (want !== f.on && !dead) audio(g, { a: "flip", side: button === "left" ? "L" : "R", up: want }); // the tilt dropping a flipper is not a click
     f.on = want;
-  };
-  if (l >= 0) flip(l, "L", !dead && g.input.left);
-  if (r >= 0) flip(r, "R", !dead && g.input.right);
+  }
   if (w.plunger) {
     const p = w.plunger;
     if (p.pull === 1 && !g.input.plunge) audio(g, { a: "plunge", s: Math.min(1, p.pos / p.stroke) });
