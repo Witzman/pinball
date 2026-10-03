@@ -5,6 +5,7 @@ import type { TableRules } from "../../src/rules";
 import { allTables, tableSetups } from "../../src/tables";
 import { colonyTable } from "../../src/tables/colony";
 import { validateTable } from "../../src/table/validate";
+import { dropAt, insideSolid, restGrid } from "../helpers/rest-grid";
 
 /** A game of The Colony in free play that writes down the switches the rules hear, in order. */
 function play(): { g: Game; seen: string[] } {
@@ -13,30 +14,8 @@ function play(): { g: Game; seen: string[] } {
   return { g: createGame(colonyTable, { rules }), seen };
 }
 
-/** Puts the (only) ball at rest at (x, y) mm. */
-function drop(g: Game, x: number, y: number): void {
-  Object.assign(g.table.world.balls[0]!, { x: x / 1000, y: y / 1000, vx: 0, vy: 0, zone: 0 });
-}
-
-/** Whether a ball centre at (x, y) mm would overlap a wall, a post or a flipper, or sit exactly above a wall end (spawn artifacts, not places a game reaches). */
-function insideWall(g: Game, x: number, y: number): boolean {
-  const r = g.table.ballRadius * 1000;
-  const near = (ax: number, ay: number, bx: number, by: number) => {
-    const dx = bx - ax;
-    const dy = by - ay;
-    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
-    return Math.hypot(x - (ax + t * dx), y - (ay + t * dy)) < r;
-  };
-  const w = g.table.world;
-  if (w.segments.some((s) => near(s.ax * 1000, s.ay * 1000, s.bx * 1000, s.by * 1000))) return true;
-  // a ball centred exactly above the end of a wall balances on it: a knife edge, not a place a game reaches
-  if (w.segments.some((s) => [[s.ax, s.ay], [s.bx, s.by]].some(([px, py]) => Math.abs(x - px! * 1000) < 2 && py! * 1000 > y))) return true;
-  if (w.circles.some((c) => Math.hypot(x - c.x * 1000, y - c.y * 1000) < r + c.r * 1000)) return true;
-  return colonyTable.flippers.some((f) => {
-    const a = (f.restDeg * Math.PI) / 180;
-    return near(f.pivot[0], f.pivot[1], f.pivot[0] + f.length * Math.cos(a), f.pivot[1] + f.length * Math.sin(a)) ;
-  });
-}
+const drop = dropAt;
+const insideWall = (g: Game, x: number, y: number) => insideSolid(g, colonyTable, x, y);
 
 /** Ticks until the ball drains, at most `max`; true if it did. `left` counts the ticks the ball was outside the playfield box on the way, which only a missing wall allows. */
 function drains(g: Game, max = 25000, left = { ticks: 0 }): boolean {
@@ -70,16 +49,7 @@ describe("The Colony, step 1: the outline", () => {
   });
 
   it("lets no ball rest for ever: balls dropped at rest over a grid all drain", () => {
-    const stuck: string[] = [];
-    for (let y = 40; y <= 980; y += 47) {
-      for (let x = 23; x <= 470; x += 31) {
-        const { g } = play();
-        if (insideWall(g, x, y)) continue; // a ball cannot be put there
-        drop(g, x, y);
-        if (!drains(g)) stuck.push(`(${x},${y})`);
-      }
-    }
-    expect(stuck).toEqual([]);
+    expect(restGrid(colonyTable)).toEqual([]);
   }, 60000); // about 5 s on a quiet machine: the default 5 s limit failed it under load
 
   /** The switches the rules hear for a plunger pulled for `ms` and then let go, and the ball's track until it drains. */
