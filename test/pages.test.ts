@@ -8,19 +8,40 @@ const read = (p: string) => readFileSync(fileURLToPath(new URL(`../${p}`, import
 describe("the Pages deploy", () => {
   const wf = read(".github/workflows/pages.yml");
 
-  it("runs on pushes to main, and by hand, and on nothing else (no pull requests, no other branches)", () => {
-    expect(wf).toMatch(/on:\s*\n\s+push:\s*\n\s+branches: \[main\]\s*\n\s+workflow_dispatch:/);
-    expect(wf).not.toMatch(/pull_request/);
+  /** The keys directly under `on:`, and the lines of the whole `on:` block. */
+  const onBlock = (() => {
+    const m = /^on:\s*\n((?:[ \t]+.*\n|\s*\n)+)/m.exec(wf)!;
+    const lines = m[1]!.split("\n").filter((l) => l.trim() !== "");
+    return { text: m[1]!, keys: lines.filter((l) => /^ {2}\S/.test(l)).map((l) => l.trim().replace(/:.*/, "")) };
+  })();
+  /** The workflow's steps, in order, as their `uses:` or `run:` text. */
+  const steps = [...wf.matchAll(/^ {6}- (?:id: \w+\n {8})?(?:uses|run): (.+)$/gm)].map((m) => m[1]!.trim());
+
+  it("runs on pushes to main and by hand, and on no other trigger (no pull requests, schedules or other workflows)", () => {
+    expect(onBlock.keys).toEqual(["push", "workflow_dispatch"]);
+    expect(onBlock.text).toMatch(/branches: \[main\]/);
+  });
+
+  it("lets only main publish, even for a manual run started from another branch", () => {
+    expect(wf).toMatch(/^ {4}if: github\.ref == 'refs\/heads\/main'$/m);
   });
 
   it("asks for exactly the permissions a Pages deploy needs", () => {
     expect(wf).toMatch(/permissions:\s*\n\s+contents: read\s*\n\s+pages: write\s*\n\s+id-token: write/);
   });
 
-  it("tests, builds and checks the budget before it publishes the build output, and publishes nothing else", () => {
-    const steps = ["npm ci", "npm test", "npm run build", "npm run budget", "upload-pages-artifact", "deploy-pages"].map((s) => wf.indexOf(s));
-    expect(steps.every((i) => i > 0)).toBe(true);
-    expect([...steps].sort((a, b) => a - b)).toEqual(steps);
+  it("checks out, tests, builds and checks the budget before it uploads and deploys the build output, in that order", () => {
+    expect(steps).toEqual([
+      "actions/checkout@v4",
+      "actions/setup-node@v4",
+      "npm ci",
+      "npm test",
+      "npm run build",
+      "npm run budget",
+      "actions/configure-pages@v5",
+      "actions/upload-pages-artifact@v3",
+      "actions/deploy-pages@v4",
+    ]);
     expect(wf).toMatch(/path: dist/);
   });
 

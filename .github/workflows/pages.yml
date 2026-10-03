@@ -14,13 +14,15 @@ permissions:
   pages: write
   id-token: write
 
-# one deploy at a time; a newer push replaces one that has not started yet
+# one deploy at a time; a run waiting behind another is replaced by a newer one
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
   deploy:
+    # workflow_dispatch can be started from any branch: only main may publish
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
