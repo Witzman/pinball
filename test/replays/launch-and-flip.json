@@ -4,7 +4,7 @@
     "tableId": "demo",
     "dt": 0.001,
     "seed": 1,
-    "ticks": 6000
+    "ticks": 7000
   },
   "inputs": [
     {
@@ -16,36 +16,84 @@
       "action": "plunge_up"
     },
     {
-      "tick": 2600,
+      "tick": 4400,
       "action": "left_down"
     },
     {
-      "tick": 2700,
+      "tick": 4450,
       "action": "left_up"
     },
     {
-      "tick": 3200,
-      "action": "right_down"
-    },
-    {
-      "tick": 3300,
-      "action": "right_up"
-    },
-    {
-      "tick": 4000,
+      "tick": 4500,
       "action": "left_down"
     },
     {
-      "tick": 4000,
-      "action": "right_down"
-    },
-    {
-      "tick": 4400,
+      "tick": 4550,
       "action": "left_up"
     },
     {
-      "tick": 4400,
-      "action": "right_up"
+      "tick": 4600,
+      "action": "left_down"
+    },
+    {
+      "tick": 4650,
+      "action": "left_up"
+    },
+    {
+      "tick": 4700,
+      "action": "left_down"
+    },
+    {
+      "tick": 4750,
+      "action": "left_up"
+    },
+    {
+      "tick": 4800,
+      "action": "left_down"
+    },
+    {
+      "tick": 4850,
+      "action": "left_up"
+    },
+    {
+      "tick": 4900,
+      "action": "left_down"
+    },
+    {
+      "tick": 4950,
+      "action": "left_up"
+    },
+    {
+      "tick": 5000,
+      "action": "left_down"
+    },
+    {
+      "tick": 5050,
+      "action": "left_up"
+    },
+    {
+      "tick": 5100,
+      "action": "left_down"
+    },
+    {
+      "tick": 5150,
+      "action": "left_up"
+    },
+    {
+      "tick": 5200,
+      "action": "left_down"
+    },
+    {
+      "tick": 5250,
+      "action": "left_up"
+    },
+    {
+      "tick": 5300,
+      "action": "left_down"
+    },
+    {
+      "tick": 5350,
+      "action": "left_up"
     }
   ]
 }

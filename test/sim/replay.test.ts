@@ -50,10 +50,22 @@ describe("replay runner", () => {
     expect(a).not.toBe(b);
   });
 
-  it("launches the ball into the playfield in the shipped replay", () => {
-    const g = runReplay(file("launch-and-flip"), allTables).game;
-    // the ball started below y = 1.0 m on the plunger; at the end it is not there any more
-    expect(g.table.world.balls[0]!.y).not.toBeCloseTo(runReplay(file("idle"), allTables).game.table.world.balls[0]!.y, 2);
+  it("launches the ball off the plunger in the shipped replays", () => {
+    const idle = runReplay(file("idle"), allTables).game.table.world.balls[0]!;
+    for (const n of ["launch-and-flip", "flipper-hammering"]) {
+      const b = runReplay(file(n), allTables).game.table.world.balls[0]!;
+      expect(Math.hypot(b.x - idle.x, b.y - idle.y), n).toBeGreaterThan(0.1);
+    }
+  });
+
+  it("makes the ball meet the flippers in the shipped replays: without the flipper inputs it ends elsewhere", () => {
+    for (const n of ["launch-and-flip", "flipper-hammering"]) {
+      const r = file(n);
+      const plungeOnly = { ...r, inputs: r.inputs.filter((i) => i.action.startsWith("plunge")) };
+      const a = runReplay(r, allTables).game.table.world.balls[0]!;
+      const b = runReplay(plungeOnly, allTables).game.table.world.balls[0]!;
+      expect(Math.hypot(a.x - b.x, a.y - b.y), n).toBeGreaterThan(0.01);
+    }
   });
 
   it("rejects an unknown table", () => {
