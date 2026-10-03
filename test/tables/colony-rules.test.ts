@@ -4,7 +4,7 @@ import { validateFlow } from "../../src/rules";
 import { advance, createGame, tick } from "../../src/sim/game";
 import { allTables, tableSetups } from "../../src/tables";
 import { colonyTable } from "../../src/tables/colony";
-import { MAX_SCORE, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
+import { KICK_ONLY, MAX_SCORE, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
 import { colonyFlow, colonyRules } from "../../src/tables/colony-rules";
 import { harness } from "../rules/harness";
 
@@ -151,11 +151,54 @@ describe("the skill shot", () => {
     expect(score(h)).toBe(SWITCH_POINTS.inL! + SWITCH_POINTS.slingR!);
   });
 
+  it("has points for every switch of the table except the skill lanes (they pay the skill shot) and the kickback lane", () => {
+    const all = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : []))];
+    const paid = all.filter((sw) => !sw.startsWith("skill") && sw !== "kickbackL").sort();
+    expect(Object.keys(SWITCH_POINTS).sort()).toEqual(paid);
+    // the placeholders as they are now: a change is deliberate
+    expect(SWITCH_POINTS).toEqual({ slingL: 10_000, slingR: 10_000, inL: 25_000, inR: 25_000, outL: 5_000, outR: 5_000, bumper1: 5_000, bumper2: 5_000, bumper3: 5_000, scout: 50_000, rollW: 10_000, rollO: 10_000, rollR: 10_000 });
+  });
+
+  it("pays each switch of the table exactly its points, a kicker switch only for a real kick, and closes the skill shot on every one of them", () => {
+    for (const [sw, points] of Object.entries(SWITCH_POINTS)) {
+      const kind = KICK_ONLY.has(sw) ? "kick" : "trigger";
+      const h = ball();
+      const l = lit(h)[0]!;
+      h.at(10).hit(sw, 0, kind).run(11);
+      expect(score(h), sw).toBe(points);
+      expect(lit(h), `${sw} closes the skill shot`).toEqual([]);
+      h.at(20).hit(l).run(21);
+      expect(score(h), `${sw}: no skill shot after it`).toBe(points);
+    }
+  });
+
+  it("pays nothing for the touches of a ball that rests on a kicker without kicking it", () => {
+    for (const sw of KICK_ONLY) {
+      const h = ball();
+      for (let t = 10; t < 200; t += 5) h.at(t).hit(sw, 0, "hit");
+      h.run(200);
+      expect(score(h), sw).toBe(0);
+    }
+  });
+
   it("pays a skill shot only for the first lane of a ball, not for a ball that comes back after the window", () => {
     const h = ball();
     const l = lit(h)[0]!;
     h.at(10).hit("outL", 0, "trigger").at(20).hit(l).run(21);
     expect(score(h)).toBe(SWITCH_POINTS.outL);
+  });
+});
+
+describe("scoring on the physical table", () => {
+  it("does not score for ever for a ball balanced on top of a bumper", () => {
+    const g = createGame(colonyTable, { ...tableSetups.colony!, seed: 3 });
+    g.input.start = true;
+    advance(g, 5);
+    g.input.start = false;
+    advance(g, 5);
+    Object.assign(g.table.world.balls[0]!, { x: 0.26, y: 0.3205 - 0.018 - 0.0135, vx: 0, vy: 0 }); // at rest exactly on the top of bumper1
+    for (let i = 0; i < 20000; i++) tick(g);
+    expect(g.rules.state.player.score).toBeLessThan(10 * SWITCH_POINTS.bumper1!);
   });
 });
 

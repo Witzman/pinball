@@ -31,12 +31,12 @@ export const colonyTable: TableDef = {
     // the left lanes: the outlane runs down beside the wall (5..60); the inlane leads from its inner wall to the flipper
     // the inlane guide ends where the top edge of the resting flipper begins, in line with it, so a ball rolls on without a notch to rest in
     { type: "polyline", points: [[60, 770], [60, 838], [138.75, 891.8]], material: "metal" },
-    { type: "segment", a: [110, 730], b: [130, 830], material: "rubber", switch: "slingL" },
+    { type: "segment", a: [110, 730], b: [130, 830], material: "rubber", switch: "slingL", kick: { speed: 1.6, minHit: 0.4, cooldownMs: 40 } },
     // the right lanes, the mirror of the left ones about the middle of the playfield between the walls (x = 244)
     { type: "polyline", points: [[428, 770], [428, 838], [349.25, 891.8]], material: "metal" },
-    { type: "segment", a: [378, 730], b: [358, 830], material: "rubber", switch: "slingR" },
-    // the Scout: a standup target on the right, slanted so no ball can rest on it
-    { type: "segment", a: [395, 545], b: [440, 565], material: "rubber", switch: "scout" },
+    { type: "segment", a: [378, 730], b: [358, 830], material: "rubber", switch: "slingR", kick: { speed: 1.6, minHit: 0.4, cooldownMs: 40 } },
+    // the Scout: a standup target on the right, slanted so no ball can rest on it, and down to the left so a ball that rolls off goes into the playfield, not into the right outlane
+    { type: "segment", a: [395, 565], b: [440, 545], material: "rubber", switch: "scout" },
   ],
   posts: [
     // the Aphid Pasture: three pop bumpers in a triangle, 60 mm or more between their edges (no pocket for a ball to bounce in for ever)

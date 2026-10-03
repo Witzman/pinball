@@ -1,6 +1,6 @@
 import type { FlowConfig, TableRules } from "../rules";
 import { demoFlow } from "./demo-rules";
-import { REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
+import { KICK_ONLY, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
 
 /** The proving ground's flow with the Colony's replay score; the rest are still placeholders. */
 export const colonyFlow: FlowConfig = { ...demoFlow, replayScore: REPLAY_SCORE };
@@ -42,7 +42,7 @@ export const colonyRules: TableRules = {
     }
     closeSkill(c);
     const points = Object.hasOwn(SWITCH_POINTS, e.sw) ? SWITCH_POINTS[e.sw]! : 0;
-    if (points > 0) c.addScore(points);
+    if (points > 0 && (e.kind === "kick" || !KICK_ONLY.has(e.sw))) c.addScore(points);
   },
   onShot(c, shot) {
     if (shot === "skillShot" && c.count("skillOpen") > 0 && c.count("superDone") === 0) {

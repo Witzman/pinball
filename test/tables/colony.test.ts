@@ -217,7 +217,7 @@ describe("The Colony, step 1: the outline", () => {
       Object.assign(g.table.world.balls[0]!, { x: (x - 70) / 1000, y: y / 1000, vx: 1, vy: 0, zone: 0 }); // straight at it from the left
       for (let i = 0; i < 150 && kinds.length === 0; i++) tick(g);
       expect(kinds, name).toEqual(["kick"]); // and the speed is checked at the moment of the kick, before anything else is hit
-      expect(g.table.world.balls[0]!.vx, name).toBeLessThan(-1.9);
+      expect(g.table.world.balls[0]!.vx, name).toBeCloseTo(-2, 1);
     }
   });
 
@@ -273,5 +273,35 @@ describe("The Colony, step 1: the outline", () => {
     expect(f.pivot[0] - f.rBase).toBeGreaterThanOrEqual(wallX); // not through the wall
     expect(f.pivot[0] - f.rBase - wallX).toBeLessThan(2 * r); // no gap a ball slips through
     expect(f.pivot[0]).toBeLessThanOrEqual(wallX + r); // the ball against the wall is right of the pivot centre: it does not wedge
+  });
+
+  it("keeps the pop bumpers well apart: 60 mm or more between the edges of each pair, so no pocket holds a ball between kickers", () => {
+    const bumpers = colonyTable.posts.filter((p) => p.kick !== undefined);
+    expect(bumpers).toHaveLength(3);
+    for (let i = 0; i < bumpers.length; i++) {
+      for (let j = i + 1; j < bumpers.length; j++) {
+        const a = bumpers[i]!;
+        const b = bumpers[j]!;
+        expect(Math.hypot(a.at[0] - b.at[0], a.at[1] - b.at[1]) - a.r - b.r, `${a.switch} and ${b.switch}`).toBeGreaterThanOrEqual(60);
+      }
+      expect(bumpers[i]!.kick).toEqual({ speed: 2, minHit: 0.3, cooldownMs: 30 });
+    }
+  });
+
+  it("makes the slings kickers too, and tags the sounds of the slings and the scout", () => {
+    for (const sw of ["slingL", "slingR"]) expect(colonyTable.walls.find((w) => w.switch === sw)!.kick).toEqual({ speed: 1.6, minHit: 0.4, cooldownMs: 40 });
+    expect(colonyTable.sounds).toEqual({ slingL: "sling", slingR: "sling", scout: "target" });
+  });
+
+  it("slants the scout down to the left, so a ball that rolls off it goes into the playfield and not out to the right outlane", () => {
+    const scout = colonyTable.walls.find((w) => w.switch === "scout")!;
+    if (scout.type !== "segment") throw new Error("the scout is a segment");
+    expect(scout.a[0]).toBeLessThan(scout.b[0]);
+    expect(scout.a[1]).toBeGreaterThan(scout.b[1]); // the left end is lower down the table
+  });
+
+  it("pins the upper flipper's placement: pivot, rest and raised angle (placeholders: change them on purpose)", () => {
+    const f = colonyTable.flippers.find((x) => x.id === "upperLeft")!;
+    expect(f).toMatchObject({ pivot: [16, 600], restDeg: 30, activeDeg: -30, input: "left" });
   });
 });
