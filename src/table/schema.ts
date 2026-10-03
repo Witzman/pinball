@@ -141,6 +141,12 @@ export interface FlipperDef {
   upMs: number;
   downMs: number;
   material: string;
+  /**
+   * Which flipper button swings it (#51): a flipper whose id is "left" or "right" follows that
+   * button; any other id follows no button unless it says so here (an upper flipper follows the
+   * left one). A flipper that follows nothing never moves.
+   */
+  input?: "left" | "right";
 }
 
 export interface PlungerDef {
