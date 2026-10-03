@@ -51,12 +51,21 @@ describe("rules state", () => {
   it("hashes differently when any part of the state differs", () => {
     const base = hashRules(busy());
     const edits: ((s: RulesState) => void)[] = [
+      (s) => { (s as { v: number }).v = 2; },
       (s) => { s.tick += 1; },
       (s) => { s.rng += 1; },
       (s) => { s.lamps.brood = "collected"; },
       (s) => { s.counters.loops = 4; },
       (s) => { s.timers.mission!.due += 1; },
+      (s) => { s.timers.tick!.every = 101; },
       (s) => { s.modes.forage!.phase = "done"; },
+      (s) => { s.modes.forage!.since += 1; },
+      (s) => { s.modes.forage!.data.shots = 3; },
+      (s) => { s.balls.inPlay = 2; },
+      (s) => { s.balls.toFeed = 1; },
+      (s) => { s.balls.saver.until += 1; },
+      (s) => { s.balls.capacity = 4; },
+      (s) => { s.player.ballNo = 3; },
       (s) => { s.balls.locked.dig = 3; },
       (s) => { s.player.score += 1; },
       (s) => { s.player.persist.eggs = 5; },
@@ -81,6 +90,47 @@ describe("rules state", () => {
     const withUndefined = busy();
     (withUndefined.counters as Record<string, unknown>).u = undefined;
     expect(() => serialize(withUndefined)).toThrow(/not plain JSON/);
+  });
+
+  it("refuses negative zero, infinity, arrays, class instances and bare-prototype objects, nested or not", () => {
+    const bad = (edit: (s: RulesState) => void) => {
+      const s = busy();
+      edit(s);
+      return () => serialize(s);
+    };
+    expect(bad((s) => { s.counters.z = -0; })).toThrow(/state\.counters\.z is negative zero/);
+    expect(bad((s) => { s.counters.z = Infinity; })).toThrow(/not a finite number/);
+    expect(bad((s) => { (s.counters as Record<string, unknown>).z = [1]; s.modes.forage!.data = { deep: { x: new Date() } } as never; })).toThrow(/not plain JSON/);
+    expect(bad((s) => { (s.lamps as Record<string, unknown>).z = new (class Foo {})(); })).toThrow(/state\.lamps\.z is not plain JSON/);
+    expect(bad((s) => { s.timers = Object.create(null) as never; })).toThrow(/state\.timers is not plain JSON/);
+    expect(bad((s) => { s.modes.forage!.data = { n: { m: Number.NaN } } as never; })).toThrow(/state\.modes\.forage\.data\.n\.m is not a finite number/);
+  });
+
+  it("refuses to restore numbers that would break the engine", () => {
+    const text = (edit: (s: Record<string, any>) => void) => {
+      const s = JSON.parse(serialize(busy()));
+      edit(s);
+      return JSON.stringify(s);
+    };
+    const bad = (edit: (s: Record<string, any>) => void) => () => restore(text(edit));
+    expect(bad((s) => { s.balls.capacity = 0; })).toThrow(/capacity >= 1/);
+    expect(bad((s) => { s.balls.capacity = -2; })).toThrow(/rules state invalid/);
+    expect(bad((s) => { s.balls.inPlay = -1; })).toThrow(/rules state invalid/);
+    expect(bad((s) => { s.balls.toFeed = -1; })).toThrow(/rules state invalid/);
+    expect(bad((s) => { s.balls.saver.until = -5; })).toThrow(/rules state invalid/);
+    expect(bad((s) => { s.balls.locked.dig = -1; })).toThrow(/rules state invalid/);
+    expect(bad((s) => { s.balls.inPlay = 5; })).toThrow(/inPlay 5 is above balls.capacity 3/);
+    expect(bad((s) => { s.timers.mission.due = -1; })).toThrow(/whole-number ticks/);
+    expect(bad((s) => { s.timers.tick.every = 0; })).toThrow(/whole-number ticks/);
+    expect(bad((s) => { s.modes.forage.since = -1; })).toThrow(/modes must map/);
+    expect(bad((s) => { s.player.ballNo = -1; })).toThrow(/player must be/);
+    expect(bad((s) => { s.tick = 2 ** 60; })).toThrow(/tick must be/);
+    expect(() => restore(text((s) => { s.player.score = 0; }).replace('"score":0', '"score":1e999'))).toThrow(/player must be/);
+    expect(() => restore(text((s) => { s.player.score = 0; }).replace('"score":0', '"score":-0'))).toThrow(/player must be/);
+  });
+
+  it("refuses unknown keys instead of carrying them along", () => {
+    expect(() => restore(JSON.stringify({ ...JSON.parse(serialize(busy())), extra: 1 }))).toThrow(/unknown key "extra"/);
   });
 
   it("refuses to restore text that is not a valid state, naming every problem", () => {
