@@ -308,12 +308,52 @@ describe("The Colony, step 1: the outline", () => {
   it("has two rising ramps, each with a mouth and an exit gate, rails in its own zone, and a height profile that climbs", () => {
     const ramps = colonyTable.visual!.ramps!;
     expect(ramps.map((r) => r.zone)).toEqual([1, 2]);
+    expect(colonyTable.visual!.heights).toEqual([0, 48, 48]);
     for (const r of ramps) {
-      expect(r.heights![1]!, `zone ${r.zone}`).toBeGreaterThan(r.heights![0]!);
-      const rails = colonyTable.walls.filter((w) => w.zones?.includes(r.zone));
+      expect(r.heights, `zone ${r.zone}`).toEqual([0, 48]);
+      const rails = colonyTable.walls.filter((w) => w.zones?.length === 1 && w.zones[0] === r.zone);
       expect(rails, `zone ${r.zone} rails`).toHaveLength(2);
       const gates = colonyTable.gates!.filter((g) => g.zoneA === r.zone || g.zoneB === r.zone);
       expect(gates.map((g) => [g.zoneA, g.zoneB])).toEqual([[0, r.zone], [r.zone, 0]]);
+    }
+  });
+
+  it("builds each ramp where its picture is: rails at the edges of the drawn path, the gates between them, the mouth at the start of the path and the exit at its end", () => {
+    for (const r of colonyTable.visual!.ramps!) {
+      const cx = r.path[0]![0];
+      const [y0, y1] = [r.path[0]![1], r.path[1]![1]];
+      const rails = colonyTable.walls.filter((w) => w.zones?.length === 1 && w.zones[0] === r.zone);
+      const railXs = rails.map((w) => (w.type === "segment" ? w.a[0] : NaN)).sort((a, b) => a - b);
+      expect(railXs, `zone ${r.zone}`).toEqual([cx - r.width / 2, cx + r.width / 2]);
+      for (const w of rails) if (w.type === "segment") expect([w.a[1], w.b[1]].sort((a, b) => a - b), `zone ${r.zone} rail span`).toEqual([Math.min(y0, y1), Math.max(y0, y1)]);
+      const [mouth, exit] = colonyTable.gates!.filter((g) => g.zoneA === r.zone || g.zoneB === r.zone);
+      expect([mouth!.a[1], mouth!.b[1]], `zone ${r.zone} mouth`).toEqual([y0, y0]);
+      expect([exit!.a[1], exit!.b[1]], `zone ${r.zone} exit`).toEqual([y1, y1]);
+      for (const g of [mouth!, exit!]) expect([g.a[0], g.b[0]].sort((a, b) => a - b), `zone ${r.zone} gate span`).toEqual([cx - r.width / 2, cx + r.width / 2]);
+    }
+  });
+
+  it("keeps a ball on the table even when it slips into a ramp zone outside the rails at the edge of a mouth", () => {
+    // starts in a ramp zone just outside the rails, found by a random search on the table without the outer walls in the ramp zones: each one flew out through the left wall there
+    const starts: [number, number, number, number, number][] = [
+      [63.8, 549.5, 0.621, -0.19, 1],
+      [64.2, 527.4, -1.128, -0.258, 1],
+      [56.6, 502.8, -0.835, 0.818, 1],
+      [61.3, 545.3, 0.458, 0.407, 1],
+      [400, 600, 1.4, -0.8, 2],
+    ];
+    for (const [x, y, vx, vy, zone] of starts) {
+      const g = createGame(colonyTable);
+      const b = g.table.world.balls[0]!;
+      Object.assign(b, { x: x / 1000, y: y / 1000, vx, vy, zone });
+      for (let i = 0; i < 8000; i++) {
+        tick(g);
+        const ball = g.table.world.balls[0];
+        if (!ball) break;
+        expect(ball.x, `(${x},${y}) tick ${i}`).toBeGreaterThan(0);
+        expect(ball.x, `(${x},${y}) tick ${i}`).toBeLessThan(0.52);
+        expect(ball.y, `(${x},${y}) tick ${i}`).toBeGreaterThan(0);
+      }
     }
   });
 

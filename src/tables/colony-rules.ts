@@ -14,6 +14,26 @@ function closeSkill(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0]): v
 }
 
 /**
+ * A ramp shot (the Leaf or the Root Ramp): the ball crosses the mouth gate going up (kind gateAB)
+ * and later the exit gate going out (gateAB). A ball that rolls back out of the mouth (gateBA)
+ * loses its trip, and a ball that falls onto the exit from the dome (gateBA) pays nothing.
+ */
+const RAMPS = { leafEnter: ["leaf", "enter"], leafExit: ["leaf", "exit"], rootEnter: ["root", "enter"], rootExit: ["root", "exit"] } as const;
+function ramp(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], e: { sw: string; kind: string }): void {
+  if (!Object.hasOwn(RAMPS, e.sw)) return;
+  const [name, end] = RAMPS[e.sw as keyof typeof RAMPS];
+  const key = `${name}In`;
+  if (end === "enter") {
+    if (e.kind === "gateAB") c.add(key);
+    else c.reset(key); // back out of the mouth: the trip is off
+  } else if (e.kind === "gateAB" && c.count(key) > 0) {
+    c.reset(key);
+    c.addScore(RAMP_SHOT);
+    c.emit({ c: "dmd", show: { id: `${name}Ramp`, args: { points: RAMP_SHOT } } });
+  }
+}
+
+/**
  * The Colony so far: the skill shot. Each ball lights one of the three lanes up the plunger
  * lane at random (seeded, part of the state); reaching the lit lane before anything else on
  * the table is the skill shot (1,000,000); running the whole lane, skill1 to skill3 in order,
@@ -41,14 +61,11 @@ export const colonyRules: TableRules = {
       return;
     }
     closeSkill(c);
+    ramp(c, e);
     const points = Object.hasOwn(SWITCH_POINTS, e.sw) ? SWITCH_POINTS[e.sw]! : 0;
     if (points > 0 && (e.kind === "kick" || !KICK_ONLY.has(e.sw))) c.addScore(points);
   },
   onShot(c, shot) {
-    if (shot === "leafRamp" || shot === "rootRamp") {
-      c.addScore(RAMP_SHOT);
-      c.emit({ c: "dmd", show: { id: shot, args: { points: RAMP_SHOT } } });
-    }
     if (shot === "skillShot" && c.count("skillOpen") > 0 && c.count("superDone") === 0) {
       c.add("superDone");
       c.addScore(SUPER_SKILL_SHOT);
@@ -57,6 +74,8 @@ export const colonyRules: TableRules = {
   },
   onDrain(c) {
     closeSkill(c);
+    c.reset("leafIn");
+    c.reset("rootIn");
   },
   bonus: () => 0,
 };

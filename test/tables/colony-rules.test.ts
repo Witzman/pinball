@@ -187,6 +187,39 @@ describe("the skill shot", () => {
     expect(h.cmds.filter((c) => c.c === "dmd" && (c.show.id === "leafRamp" || c.show.id === "rootRamp"))).toHaveLength(2);
   });
 
+  it("pays nothing for a ball that falls onto the exit from above, or that rolled back out of the mouth before it", () => {
+    for (const [enter, exit] of [["leafEnter", "leafExit"], ["rootEnter", "rootExit"]] as const) {
+      const h = ball();
+      h.at(10).hit(exit, 0, "gateBA").run(11); // dropped onto the exit line from the dome: zone 0 into the ramp
+      h.at(20).hit(enter, 0, "gateAB").at(30).hit(enter, 0, "gateBA").at(40).hit(exit, 0, "gateBA").run(41); // in, back out of the mouth, then a drop from the top
+      expect(score(h), enter).toBe(0);
+      h.at(50).hit(exit, 0, "gateAB").run(51); // an exit without a trip in
+      expect(score(h), enter).toBe(0);
+    }
+  });
+
+  it("does not let a player farm a ramp by rocking in and out of the mouth: only a complete trip pays, and only once", () => {
+    const h = ball();
+    for (let t = 10; t < 200; t += 20) h.at(t).hit("leafEnter", 0, "gateAB").at(t + 10).hit("leafEnter", 0, "gateBA");
+    h.run(200);
+    expect(score(h)).toBe(0);
+    h.at(210).hit("leafEnter", 0, "gateAB").at(220).hit("leafExit", 0, "gateAB").at(230).hit("leafExit", 0, "gateAB").run(231);
+    expect(score(h)).toBe(RAMP_SHOT); // the second exit has no trip behind it
+  });
+
+  it("forgets a trip when the ball drains", () => {
+    const h = harness(colonyRules, { flow: { ...colonyFlow, saverTicks: 0 }, shots: colonyTable.shots });
+    h.at(1).button("start", true).at(2).ballAtPlunger().run(3);
+    h.at(10).hit("rootEnter", 0, "gateAB").at(20).drain().run(21);
+    h.at(4000).ballAtPlunger().at(4010).hit("rootExit", 0, "gateAB").run(4011);
+    expect(score(h)).toBe(0);
+  });
+
+  it("pins the ramp shot at a tenth of a skill shot", () => {
+    expect(RAMP_SHOT).toBe(100_000);
+    expect(RAMP_SHOT).toBe(SKILL_SHOT / 10);
+  });
+
   it("pays nothing for the touches of a ball that rests on a kicker without kicking it", () => {
     for (const sw of KICK_ONLY) {
       const h = ball();
