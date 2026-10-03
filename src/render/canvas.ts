@@ -1,8 +1,9 @@
-import type { LoadedTable } from "../table/load";
-import type { FlipperView, Snapshot } from "../sim/game";
+import type { FlipperView, Snapshot, StaticScene } from "../sim/snapshot";
+import { drawHud } from "./hud";
+import type { Renderer } from "./renderer";
 
-// Placeholder vector art (issue #18 makes the real art). Reads only a snapshot and
-// the static colliders of the table; it never writes to the simulation.
+// Placeholder vector art (issue #18 makes the real art). Reads only the static scene
+// and a snapshot (#21); it never touches the simulation or the rules.
 
 const MARGIN = 0.96;
 
@@ -49,48 +50,46 @@ function drawFlipper(ctx: CanvasRenderingContext2D, v: View, f: FlipperView): vo
   }
 }
 
-export function drawScene(ctx: CanvasRenderingContext2D, cw: number, ch: number, table: LoadedTable, snap: Snapshot): void {
-  const v = fitView(cw, ch, table.playfieldWidth, table.playfieldLength);
+export function drawScene(ctx: CanvasRenderingContext2D, cw: number, ch: number, scene: StaticScene, snap: Readonly<Snapshot>): void {
+  const v = fitView(cw, ch, scene.width, scene.length);
   const X = (x: number) => v.ox + x * v.scale;
   const Y = (y: number) => v.oy + y * v.scale;
-  const w = table.world;
 
   ctx.fillStyle = "#0b0d14";
   ctx.fillRect(0, 0, cw, ch);
   ctx.fillStyle = "#151a2b";
-  ctx.fillRect(v.ox, v.oy, table.playfieldWidth * v.scale, table.playfieldLength * v.scale);
+  ctx.fillRect(v.ox, v.oy, scene.width * v.scale, scene.length * v.scale);
 
   ctx.lineWidth = Math.max(1.5, 0.003 * v.scale);
   ctx.lineCap = "round";
-  for (const s of w.segments) {
-    ctx.strokeStyle = s.sw > 0 ? "#ffb84d" : s.e > 0.5 ? "#4da3ff" : "#9aa6c4";
+  for (const s of scene.walls) {
+    ctx.strokeStyle = s.kind === "switch" ? "#ffb84d" : s.kind === "rubber" ? "#4da3ff" : "#9aa6c4";
     ctx.beginPath();
     ctx.moveTo(X(s.ax), Y(s.ay));
     ctx.lineTo(X(s.bx), Y(s.by));
     ctx.stroke();
   }
-  for (const c of w.circles) {
-    ctx.fillStyle = c.sw > 0 ? "#ffb84d" : "#4da3ff";
+  for (const c of scene.posts) {
+    ctx.fillStyle = c.kind === "switch" ? "#ffb84d" : "#4da3ff";
     ctx.beginPath();
     ctx.arc(X(c.x), Y(c.y), c.r * v.scale, 0, Math.PI * 2);
     ctx.fill();
   }
 
   ctx.lineWidth = Math.max(1, 0.002 * v.scale);
-  for (const t of w.triggers) {
+  for (const t of scene.triggers) {
     ctx.strokeStyle = t.hold ? "#7ee787" : "#ffd866";
     ctx.beginPath();
     ctx.arc(X(t.x), Y(t.y), t.r * v.scale, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  for (const m of w.magnets) {
+  for (const m of snap.magnets) {
     ctx.strokeStyle = m.on ? "#ff6b9d" : "#7d5a6e";
     ctx.beginPath();
     ctx.arc(X(m.x), Y(m.y), m.r * v.scale, 0, Math.PI * 2);
     ctx.stroke();
   }
-
   const p = snap.plunger;
   if (p) {
     const cx = p.x - p.dirx * p.pos;
@@ -113,4 +112,29 @@ export function drawScene(ctx: CanvasRenderingContext2D, cw: number, ch: number,
     ctx.arc(X(b.x), Y(b.y), b.r * v.scale, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+/** The Canvas 2D renderer: the placeholder art and the HUD text, behind the Renderer interface. */
+export function createCanvasRenderer(ctx: CanvasRenderingContext2D): Renderer {
+  let w = 0;
+  let h = 0;
+  let scene: StaticScene | null = null;
+  return {
+    resize(cssW, cssH, dpr) {
+      w = cssW;
+      h = cssH;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    },
+    setScene(s) {
+      scene = s;
+    },
+    draw(snap) {
+      if (scene === null) return;
+      drawScene(ctx, w, h, scene, snap);
+      drawHud(ctx, snap.hud.lines, w, h);
+    },
+    dispose() {
+      scene = null;
+    },
+  };
 }

@@ -1,8 +1,8 @@
 import { applyKey, ButtonLatch, TouchTracker } from "../input/input";
-import { drawScene } from "../render/canvas";
-import { drawHud } from "../render/hud";
-import { advance, createGame, nudge, setPaused, snapshot, takeCommands } from "../sim/game";
+import { createCanvasRenderer } from "../render/canvas";
+import { advance, createGame, nudge, setPaused, takeCommands } from "../sim/game";
 import type { GameInput } from "../sim/game";
+import { buildScene, snapshot } from "../sim/snapshot";
 import { localStore } from "../storage";
 import { demoTable } from "../tables/demo";
 import { demoFlow } from "../tables/demo-rules";
@@ -29,11 +29,14 @@ async function boot(): Promise<void> {
   const game = createGame(demoTable, { ...tableSetups.demo, machine: toMachine(stored) });
   const keys: GameInput = { left: false, right: false, plunge: false, coin: false, start: false, buyin: false };
   const touch = new TouchTracker(innerWidth, innerHeight);
+  const renderer = createCanvasRenderer(ctx);
+  renderer.setScene(buildScene(game.table));
 
   function resize(): void {
     const dpr = devicePixelRatio || 1;
     canvas.width = Math.round(innerWidth * dpr);
     canvas.height = Math.round(innerHeight * dpr);
+    renderer.resize(innerWidth, innerHeight, dpr);
     touch.resize(innerWidth, innerHeight);
   }
   addEventListener("resize", resize);
@@ -113,10 +116,7 @@ async function boot(): Promise<void> {
       reported = game.errorCount;
     }
     last = now;
-    const dpr = devicePixelRatio || 1;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawScene(ctx, innerWidth, innerHeight, game.table, snapshot(game));
-    drawHud(ctx, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, demoFlow.startCost), innerWidth, innerHeight);
+    renderer.draw(snapshot(game, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, demoFlow.startCost)));
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
