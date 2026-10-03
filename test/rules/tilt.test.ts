@@ -118,6 +118,19 @@ describe("tilt", () => {
     expect(h.state.game!.phase).toBe("bonus");
   });
 
+  it("keeps a locked ball locked, and does not throw, when the table has no room to release it", () => {
+    const h = game({ tilt: { free: 0, warnings: 0, decayTicks: 2000 } });
+    h.state.balls.locked = { saucer: 1 }; // a ball in play and one locked, with a capacity of 1
+    h.take();
+    expect(() => h.at(10).nudge().run(11)).not.toThrow();
+    expect(h.state.game!.tilted).toBe(true);
+    expect(h.state.balls).toMatchObject({ inPlay: 1, locked: { saucer: 1 } });
+    expect(h.cmds.filter((c) => c.c === "releaseBall")).toEqual([]);
+    h.at(20).drain().run(21); // the tilted ball drains: the ball ends although a ball is still locked
+    expect(h.state.game!.phase).toBe("bonus");
+    expect(h.state.balls.locked).toEqual({});
+  });
+
   it("only counts nudges while a ball is played: not in attract, bonus or over", () => {
     const attract = harness(table, { flow: cfg });
     attract.at(5).nudge().at(6).nudge().run(7);

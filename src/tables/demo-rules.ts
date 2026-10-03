@@ -12,6 +12,8 @@ export const demoFlow: FlowConfig = {
   replayScore: 20000,
   highScoreCredit: true,
   boardSize: 5,
+  // placeholders, no QA to tune them: two free nudges, two warnings, the fifth in a short time is a tilt; one nudge cools in 4 s
+  tilt: { free: 2, warnings: 2, decayTicks: 4000 },
   buyIn: { cost: 1, balls: 2, windowTicks: 10000 },
 };
 

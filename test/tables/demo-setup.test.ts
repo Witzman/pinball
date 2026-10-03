@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advance, createGame, takeCommands } from "../../src/sim/game";
+import { advance, createGame, nudge, takeCommands, tick } from "../../src/sim/game";
 import { allTables, tableSetups } from "../../src/tables";
 import { demoTable } from "../../src/tables/demo";
 import { demoFlow } from "../../src/tables/demo-rules";
@@ -37,5 +37,22 @@ describe("the shipping tables' setups", () => {
     expect(g.rules.state.game!.phase).toBe("play");
     expect(g.rules.state.player.ballNo).toBe(1);
     expect(takeCommands(g).map((c) => c.c)).toContain("feedBall");
+  });
+
+  it("tilts the demo table when it is shoved too much: two free nudges, two warnings, the fifth is the tilt", () => {
+    const g = createGame(demoTable, tableSetups.demo!);
+    g.input.start = true;
+    advance(g, 5);
+    g.input.start = false;
+    advance(g, 5);
+    g.table.world.gravity = 0;
+    const heat: boolean[] = [];
+    for (let i = 0; i < 5; i++) {
+      nudge(g, "left");
+      for (let t = 0; t < 260; t++) tick(g); // past the cooldown, far inside the cooling time
+      heat.push(g.rules.state.game!.tilted);
+    }
+    expect(heat).toEqual([false, false, false, false, true]);
+    expect(g.rules.state.game!.tiltHeat).toBe(5);
   });
 });

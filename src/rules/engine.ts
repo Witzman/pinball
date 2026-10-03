@@ -327,7 +327,9 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
         },
         now: () => ctx.now,
         releaseLocks() {
-          for (const id of Object.keys(state.balls.locked).sort(byId)) while ((state.balls.locked[id] ?? 0) > 0) ctx.ball.release(id);
+          // as many as the table has room for: a table whose capacity is too small keeps the rest locked rather than crash the tilt
+          const b = state.balls;
+          for (const id of Object.keys(b.locked).sort(byId)) while ((b.locked[id] ?? 0) > 0 && b.inPlay + b.toFeed + 1 <= b.capacity) ctx.ball.release(id);
         },
         feed: () => ctx.ball.feed(),
       })

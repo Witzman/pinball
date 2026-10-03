@@ -294,6 +294,8 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
     afterDrain() {
       const b = host.state.balls;
       if (game().phase !== "play" || b.inPlay > 0 || b.toFeed > 0) return;
+      // a tilted ball is dead: balls the table had no room to release do not keep it alive (serve clears the table)
+      if (game().tilted) b.locked = {};
       for (const n of Object.values(b.locked)) if (n > 0) return;
       endBall();
     },
