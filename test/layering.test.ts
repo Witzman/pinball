@@ -42,6 +42,8 @@ export function violations(rel: string, code: string, allowed: string[]): string
   const bad: string[] = [];
   for (const spec of importsOf(strip(code))) {
     if (!spec.startsWith(".")) {
+      // the one exception (#45, owner decision 2026-10-03): the PlayCanvas renderer may import the engine
+      if (spec === "playcanvas" && rel.startsWith("render/playcanvas/")) continue;
       bad.push(`${rel} imports "${spec}": no runtime dependencies`);
       continue;
     }
@@ -108,6 +110,15 @@ describe("storage", () => {
       }
     }
     expect(scanned).toBeGreaterThan(20);
+  });
+});
+
+describe("the one dependency exception (#45)", () => {
+  it("lets render/playcanvas import the engine, and nothing else import it or any other package", () => {
+    expect(violations("render/playcanvas/index.ts", 'import * as pc from "playcanvas";', ["sim", "render"])).toEqual([]);
+    expect(violations("render/canvas.ts", 'import * as pc from "playcanvas";', ["sim", "render"]).join("\n")).toMatch(/no runtime dependencies/);
+    expect(violations("sim/game.ts", 'import * as pc from "playcanvas";', ["sim"]).join("\n")).toMatch(/no runtime dependencies/);
+    expect(violations("render/playcanvas/index.ts", 'import x from "lodash";', ["sim", "render"]).join("\n")).toMatch(/no runtime dependencies/);
   });
 });
 

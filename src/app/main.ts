@@ -1,5 +1,6 @@
 import { applyKey, ButtonLatch, TouchTracker } from "../input/input";
 import { createCanvasRenderer } from "../render/canvas";
+import type { Renderer } from "../render/renderer";
 import { createAudio } from "../audio";
 import { advance, createGame, nudge, setPaused, takeAudio, takeCommands } from "../sim/game";
 import type { GameInput } from "../sim/game";
@@ -12,9 +13,6 @@ import { chooseTable } from "./table-choice";
 const found = document.getElementById("table");
 if (!(found instanceof HTMLCanvasElement)) throw new Error("canvas #table missing");
 const canvas: HTMLCanvasElement = found;
-const context = canvas.getContext("2d");
-if (!context) throw new Error("2d canvas not available");
-const ctx: CanvasRenderingContext2D = context;
 const banner = document.getElementById("banner");
 
 async function boot(): Promise<void> {
@@ -30,13 +28,26 @@ async function boot(): Promise<void> {
   const game = createGame(def, { ...setup, machine: toMachine(stored) });
   const keys: GameInput = { left: false, right: false, plunge: false, coin: false, start: false, buyin: false };
   const touch = new TouchTracker(innerWidth, innerHeight);
-  const renderer = createCanvasRenderer(ctx);
+  // ?renderer=playcanvas draws the 3D table (#45); anything else is the canvas placeholder
+  const usePlayCanvas = new URLSearchParams(location.search).get("renderer") === "playcanvas";
+  let renderer: Renderer;
+  if (usePlayCanvas) {
+    const { createPlayCanvasRenderer } = await import("../render/playcanvas");
+    renderer = createPlayCanvasRenderer({ canvas, overlayParent: document.body });
+  } else {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("2d canvas not available");
+    renderer = createCanvasRenderer(ctx);
+  }
+  const cameraMode = usePlayCanvas ? "tilted" : "top";
   renderer.setScene(buildScene(game.table));
 
   function resize(): void {
     const dpr = devicePixelRatio || 1;
-    canvas.width = Math.round(innerWidth * dpr);
-    canvas.height = Math.round(innerHeight * dpr);
+    if (!usePlayCanvas) {
+      canvas.width = Math.round(innerWidth * dpr);
+      canvas.height = Math.round(innerHeight * dpr);
+    }
     renderer.resize(innerWidth, innerHeight, dpr);
     touch.resize(innerWidth, innerHeight);
   }
@@ -132,10 +143,20 @@ async function boot(): Promise<void> {
       reported = game.errorCount;
     }
     last = now;
-    renderer.draw(snapshot(game, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, flow.startCost)));
+    renderer.draw(snapshot(game, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, flow.startCost), cameraMode));
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+
+  // ?auto=<ms> plays a scripted start for screenshots: start a game, pull the plunger, let go after <ms>
+  const auto = Number(new URLSearchParams(location.search).get("auto"));
+  if (auto > 0) {
+    setTimeout(() => (keys.start = true), 300);
+    setTimeout(() => (keys.start = false), 400);
+    setTimeout(() => (keys.plunge = true), 900);
+    setTimeout(() => (keys.plunge = false), 900 + auto);
+    setInterval(() => mergeInput(), 16);
+  }
 
   // a handle for automated checks (screenshots); not part of the game
   (globalThis as Record<string, unknown>).__pinball = game;
