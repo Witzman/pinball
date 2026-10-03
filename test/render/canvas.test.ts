@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { drawScene, fitView } from "../../src/render/canvas";
-import { advance, createGame, snapshot } from "../../src/sim/game";
+import { createCanvasRenderer, drawScene, fitView } from "../../src/render/canvas";
+import { advance, createGame } from "../../src/sim/game";
+import { buildScene, snapshot } from "../../src/sim/snapshot";
 import { demoTable } from "../../src/tables/demo";
 
 /** A recording stand-in for CanvasRenderingContext2D. */
@@ -48,7 +49,7 @@ describe("drawScene", () => {
   it("draws without throwing and draws every wall, post, flipper and the ball", () => {
     const g = createGame(demoTable);
     const { ctx, calls, arcs } = fakeCtx();
-    drawScene(ctx, 600, 900, g.table, snapshot(g));
+    drawScene(ctx, 600, 900, buildScene(g.table), snapshot(g));
     expect(calls.stroke).toBeGreaterThanOrEqual(g.table.world.segments.length);
     // the ball is an arc of its (scaled) radius
     const view = fitView(600, 900, demoTable.playfield.width / 1000, demoTable.playfield.length / 1000);
@@ -60,11 +61,90 @@ describe("drawScene", () => {
   it("draws a raised flipper somewhere else than a resting one", () => {
     const g = createGame(demoTable);
     const resting = fakeCtx();
-    drawScene(resting.ctx, 600, 900, g.table, snapshot(g));
+    drawScene(resting.ctx, 600, 900, buildScene(g.table), snapshot(g));
     g.input.left = true;
     advance(g, 50);
     const raised = fakeCtx();
-    drawScene(raised.ctx, 600, 900, g.table, snapshot(g));
+    drawScene(raised.ctx, 600, 900, buildScene(g.table), snapshot(g));
     expect(JSON.stringify(resting.arcs)).not.toBe(JSON.stringify(raised.arcs));
+  });
+});
+
+/** Every call a fake context received, in order, with its arguments. */
+function recordingCtx() {
+  const log: string[] = [];
+  const target: Record<string, unknown> = {};
+  const ctx = new Proxy(target, {
+    get(t, name: string) {
+      if (name in t) return t[name];
+      return (...args: unknown[]) => void log.push(`${name}(${args.join(",")})`);
+    },
+    set(t, name: string, v) {
+      log.push(`${name}=${String(v)}`);
+      t[name] = v;
+      return true;
+    },
+  }) as unknown as CanvasRenderingContext2D;
+  return { ctx, log };
+}
+
+describe("the canvas renderer", () => {
+  function setup() {
+    const g = createGame(demoTable);
+    const { ctx, log } = recordingCtx();
+    const r = createCanvasRenderer(ctx);
+    r.setScene(buildScene(g.table));
+    r.resize(600, 900, 2);
+    return { g, r, log };
+  }
+
+  it("draws the same moment the same way twice, and never touches the snapshot or the world", () => {
+    const { g, r, log } = setup();
+    const snap = snapshot(g, ["BALL 1   SCORE 0"]);
+    const frozen = JSON.stringify(snap);
+    Object.freeze(snap);
+    for (const part of [snap.balls, snap.flippers, snap.magnets, snap.lamps, snap.hud, snap.hud.lines, snap.camera]) Object.freeze(part);
+    const before = JSON.stringify(g.table.world);
+    log.length = 0;
+    r.draw(snap);
+    const first = log.slice();
+    log.length = 0;
+    r.draw(snap);
+    expect(log).toEqual(first);
+    expect(first.length).toBeGreaterThan(10);
+    expect(JSON.stringify(snap)).toBe(frozen);
+    expect(JSON.stringify(g.table.world)).toBe(before);
+  });
+
+  it("draws the hud lines of the snapshot", () => {
+    const { g, r, log } = setup();
+    log.length = 0;
+    r.draw(snapshot(g, ["PRESS START"]));
+    expect(log.some((c) => c.startsWith("fillText(PRESS START"))).toBe(true);
+  });
+
+  it("draws nothing before it has a scene, and again nothing after dispose", () => {
+    const g = createGame(demoTable);
+    const { ctx, log } = recordingCtx();
+    const r = createCanvasRenderer(ctx);
+    r.draw(snapshot(g));
+    expect(log).toEqual([]);
+    r.setScene(buildScene(g.table));
+    r.dispose();
+    r.draw(snapshot(g));
+    expect(log).toEqual([]);
+  });
+
+  it("draws a magnet in its live state: lit and unlit look different", () => {
+    const { g, r, log } = setup();
+    const snap = snapshot(g);
+    snap.magnets = [{ x: 0.2, y: 0.3, r: 0.02, on: false }];
+    log.length = 0;
+    r.draw(snap);
+    const off = log.slice();
+    snap.magnets = [{ x: 0.2, y: 0.3, r: 0.02, on: true }];
+    log.length = 0;
+    r.draw(snap);
+    expect(log).not.toEqual(off);
   });
 });

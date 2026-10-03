@@ -323,34 +323,5 @@ export function advance(g: Game, dtMs: number): void {
   }
 }
 
-export interface FlipperView {
-  px: number;
-  py: number;
-  tx: number;
-  ty: number;
-  dx: number;
-  dy: number;
-  k: number;
-  cs: number;
-  r0: number;
-  r1: number;
-}
-
-/** Everything the renderer needs, as plain data. */
-export interface Snapshot {
-  tick: number;
-  balls: { x: number; y: number; r: number }[];
-  flippers: FlipperView[];
-  plunger: { x: number; y: number; dirx: number; diry: number; halfWidth: number; pos: number } | null;
-}
-
-export function snapshot(g: Game): Snapshot {
-  const w = g.table.world;
-  const p = w.plunger;
-  return {
-    tick: w.tick,
-    balls: w.balls.map((b) => ({ x: b.x, y: b.y, r: b.r })),
-    flippers: w.flippers.map((f) => ({ px: f.px, py: f.py, tx: f.tx, ty: f.ty, dx: f.dx, dy: f.dy, k: f.k, cs: f.cs, r0: f.r0, r1: f.r1 })),
-    plunger: p ? { x: p.x, y: p.y, dirx: p.dirx, diry: p.diry, halfWidth: p.halfWidth, pos: p.pos } : null,
-  };
-}
+export { snapshot } from "./snapshot";
+export type { Camera, FlipperView, Snapshot, StaticScene } from "./snapshot";

@@ -12,7 +12,7 @@ const ALLOWED: Record<string, string[]> = {
   tables: ["table", "rules", "tables"],
   sim: ["core", "table", "rules", "sim"],
   input: ["input", "sim"],
-  render: ["core", "table", "sim", "render"],
+  render: ["sim", "render"],
   storage: ["storage"],
   app: ["app", "input", "render", "sim", "rules", "tables", "table", "core", "storage"],
 };
