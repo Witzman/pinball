@@ -57,21 +57,26 @@ function applyInput(g: Game): void {
   if (w.plunger) w.plunger.pull = g.input.plunge ? 1 : 0;
 }
 
+/** One physics tick: input applied, world stepped, drained balls replaced. */
+export function tick(g: Game): void {
+  const w = g.table.world;
+  applyInput(g);
+  step(w);
+  for (let i = 0; i < w.balls.length; i++) {
+    if (w.balls[i]!.y > g.table.playfieldLength + DRAIN_MARGIN) {
+      w.balls[i] = newBall(g);
+      g.drains += 1;
+    }
+  }
+}
+
 /** Runs the physics for `dtMs` of real time, in whole ticks; the remainder carries over. */
 export function advance(g: Game, dtMs: number): void {
   if (g.paused) return;
   g.accMs += Math.min(dtMs, MAX_FRAME_MS);
-  const w = g.table.world;
   while (g.accMs >= TICK_MS) {
-    applyInput(g);
-    step(w);
+    tick(g);
     g.accMs -= TICK_MS;
-    for (let i = 0; i < w.balls.length; i++) {
-      if (w.balls[i]!.y > g.table.playfieldLength + DRAIN_MARGIN) {
-        w.balls[i] = newBall(g);
-        g.drains += 1;
-      }
-    }
   }
 }
 

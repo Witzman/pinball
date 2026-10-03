@@ -1,0 +1,51 @@
+{
+  "header": {
+    "format": 1,
+    "tableId": "demo",
+    "dt": 0.001,
+    "seed": 1,
+    "ticks": 6000
+  },
+  "inputs": [
+    {
+      "tick": 300,
+      "action": "plunge_down"
+    },
+    {
+      "tick": 700,
+      "action": "plunge_up"
+    },
+    {
+      "tick": 2600,
+      "action": "left_down"
+    },
+    {
+      "tick": 2700,
+      "action": "left_up"
+    },
+    {
+      "tick": 3200,
+      "action": "right_down"
+    },
+    {
+      "tick": 3300,
+      "action": "right_up"
+    },
+    {
+      "tick": 4000,
+      "action": "left_down"
+    },
+    {
+      "tick": 4000,
+      "action": "right_down"
+    },
+    {
+      "tick": 4400,
+      "action": "left_up"
+    },
+    {
+      "tick": 4400,
+      "action": "right_up"
+    }
+  ]
+}

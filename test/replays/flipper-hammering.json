@@ -1,0 +1,171 @@
+{
+  "header": {
+    "format": 1,
+    "tableId": "demo",
+    "dt": 0.001,
+    "seed": 1,
+    "ticks": 4000
+  },
+  "inputs": [
+    {
+      "tick": 100,
+      "action": "left_down"
+    },
+    {
+      "tick": 150,
+      "action": "left_up"
+    },
+    {
+      "tick": 200,
+      "action": "left_down"
+    },
+    {
+      "tick": 250,
+      "action": "left_up"
+    },
+    {
+      "tick": 300,
+      "action": "left_down"
+    },
+    {
+      "tick": 350,
+      "action": "left_up"
+    },
+    {
+      "tick": 400,
+      "action": "left_down"
+    },
+    {
+      "tick": 450,
+      "action": "left_up"
+    },
+    {
+      "tick": 500,
+      "action": "left_down"
+    },
+    {
+      "tick": 550,
+      "action": "left_up"
+    },
+    {
+      "tick": 600,
+      "action": "left_down"
+    },
+    {
+      "tick": 650,
+      "action": "left_up"
+    },
+    {
+      "tick": 700,
+      "action": "left_down"
+    },
+    {
+      "tick": 750,
+      "action": "left_up"
+    },
+    {
+      "tick": 800,
+      "action": "left_down"
+    },
+    {
+      "tick": 850,
+      "action": "left_up"
+    },
+    {
+      "tick": 900,
+      "action": "left_down"
+    },
+    {
+      "tick": 950,
+      "action": "left_up"
+    },
+    {
+      "tick": 1000,
+      "action": "left_down"
+    },
+    {
+      "tick": 1050,
+      "action": "left_up"
+    },
+    {
+      "tick": 1100,
+      "action": "left_down"
+    },
+    {
+      "tick": 1150,
+      "action": "left_up"
+    },
+    {
+      "tick": 1200,
+      "action": "left_down"
+    },
+    {
+      "tick": 1250,
+      "action": "left_up"
+    },
+    {
+      "tick": 1300,
+      "action": "left_down"
+    },
+    {
+      "tick": 1350,
+      "action": "left_up"
+    },
+    {
+      "tick": 1400,
+      "action": "left_down"
+    },
+    {
+      "tick": 1450,
+      "action": "left_up"
+    },
+    {
+      "tick": 1500,
+      "action": "left_down"
+    },
+    {
+      "tick": 1550,
+      "action": "left_up"
+    },
+    {
+      "tick": 1600,
+      "action": "left_down"
+    },
+    {
+      "tick": 1650,
+      "action": "left_up"
+    },
+    {
+      "tick": 1700,
+      "action": "left_down"
+    },
+    {
+      "tick": 1750,
+      "action": "left_up"
+    },
+    {
+      "tick": 1800,
+      "action": "left_down"
+    },
+    {
+      "tick": 1850,
+      "action": "left_up"
+    },
+    {
+      "tick": 1900,
+      "action": "left_down"
+    },
+    {
+      "tick": 1950,
+      "action": "left_up"
+    },
+    {
+      "tick": 2000,
+      "action": "left_down"
+    },
+    {
+      "tick": 2050,
+      "action": "left_up"
+    }
+  ]
+}
