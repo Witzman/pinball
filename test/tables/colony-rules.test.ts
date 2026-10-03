@@ -4,7 +4,7 @@ import { validateFlow } from "../../src/rules";
 import { advance, createGame, tick } from "../../src/sim/game";
 import { allTables, tableSetups } from "../../src/tables";
 import { colonyTable } from "../../src/tables/colony";
-import { KICK_ONLY, MAX_SCORE, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
+import { KICK_ONLY, MAX_SCORE, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
 import { colonyFlow, colonyRules } from "../../src/tables/colony-rules";
 import { harness } from "../rules/harness";
 
@@ -152,8 +152,8 @@ describe("the skill shot", () => {
   });
 
   it("has points for every switch of the table except the skill lanes (they pay the skill shot) and the kickback lane", () => {
-    const all = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : []))];
-    const paid = all.filter((sw) => !sw.startsWith("skill") && sw !== "kickbackL").sort();
+    const all = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : [])), ...(colonyTable.gates ?? []).flatMap((g) => (g.switch ? [g.switch] : []))];
+    const paid = all.filter((sw) => !sw.startsWith("skill") && sw !== "kickbackL" && !/^(leaf|root)(Enter|Exit)$/.test(sw)).sort(); // the ramps pay for the shot, not for the gates
     expect(Object.keys(SWITCH_POINTS).sort()).toEqual(paid);
     // the placeholders as they are now: a change is deliberate
     expect(SWITCH_POINTS).toEqual({ slingL: 10_000, slingR: 10_000, inL: 25_000, inR: 25_000, outL: 5_000, outR: 5_000, bumper1: 5_000, bumper2: 5_000, bumper3: 5_000, scout: 50_000, rollW: 10_000, rollO: 10_000, rollR: 10_000 });
@@ -170,6 +170,54 @@ describe("the skill shot", () => {
       h.at(20).hit(l).run(21);
       expect(score(h), `${sw}: no skill shot after it`).toBe(points);
     }
+  });
+
+  it("pays a ramp shot for going up a ramp and out at the top, once for each trip, and closes the skill shot at the mouth", () => {
+    const h = ball();
+    const l = lit(h)[0]!;
+    h.at(10).hit("leafEnter", 0, "gateAB").run(11);
+    expect(lit(h)).toEqual([]);
+    expect(score(h)).toBe(0); // the mouth alone pays nothing
+    h.at(20).hit("leafExit", 0, "gateAB").run(21);
+    expect(score(h)).toBe(RAMP_SHOT);
+    h.at(30).hit("rootEnter", 0, "gateAB").at(40).hit("rootExit", 0, "gateAB").run(41);
+    expect(score(h)).toBe(2 * RAMP_SHOT);
+    h.at(50).hit(l).run(51); // the window is closed
+    expect(score(h)).toBe(2 * RAMP_SHOT);
+    expect(h.cmds.filter((c) => c.c === "dmd" && (c.show.id === "leafRamp" || c.show.id === "rootRamp"))).toHaveLength(2);
+  });
+
+  it("pays nothing for a ball that falls onto the exit from above, or that rolled back out of the mouth before it", () => {
+    for (const [enter, exit] of [["leafEnter", "leafExit"], ["rootEnter", "rootExit"]] as const) {
+      const h = ball();
+      h.at(10).hit(exit, 0, "gateBA").run(11); // dropped onto the exit line from the dome: zone 0 into the ramp
+      h.at(20).hit(enter, 0, "gateAB").at(30).hit(enter, 0, "gateBA").at(40).hit(exit, 0, "gateBA").run(41); // in, back out of the mouth, then a drop from the top
+      expect(score(h), enter).toBe(0);
+      h.at(50).hit(exit, 0, "gateAB").run(51); // an exit without a trip in
+      expect(score(h), enter).toBe(0);
+    }
+  });
+
+  it("does not let a player farm a ramp by rocking in and out of the mouth: only a complete trip pays, and only once", () => {
+    const h = ball();
+    for (let t = 10; t < 200; t += 20) h.at(t).hit("leafEnter", 0, "gateAB").at(t + 10).hit("leafEnter", 0, "gateBA");
+    h.run(200);
+    expect(score(h)).toBe(0);
+    h.at(210).hit("leafEnter", 0, "gateAB").at(220).hit("leafExit", 0, "gateAB").at(230).hit("leafExit", 0, "gateAB").run(231);
+    expect(score(h)).toBe(RAMP_SHOT); // the second exit has no trip behind it
+  });
+
+  it("forgets a trip when the ball drains", () => {
+    const h = harness(colonyRules, { flow: { ...colonyFlow, saverTicks: 0 }, shots: colonyTable.shots });
+    h.at(1).button("start", true).at(2).ballAtPlunger().run(3);
+    h.at(10).hit("rootEnter", 0, "gateAB").at(20).drain().run(21);
+    h.at(4000).ballAtPlunger().at(4010).hit("rootExit", 0, "gateAB").run(4011);
+    expect(score(h)).toBe(0);
+  });
+
+  it("pins the ramp shot at a tenth of a skill shot", () => {
+    expect(RAMP_SHOT).toBe(100_000);
+    expect(RAMP_SHOT).toBe(SKILL_SHOT / 10);
   });
 
   it("pays nothing for the touches of a ball that rests on a kicker without kicking it", () => {

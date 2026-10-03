@@ -1,6 +1,6 @@
 import type { FlowConfig, TableRules } from "../rules";
 import { demoFlow } from "./demo-rules";
-import { KICK_ONLY, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
+import { KICK_ONLY, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
 
 /** The proving ground's flow with the Colony's replay score; the rest are still placeholders. */
 export const colonyFlow: FlowConfig = { ...demoFlow, replayScore: REPLAY_SCORE };
@@ -11,6 +11,26 @@ const LANES = ["skill1", "skill2", "skill3"] as const;
 function closeSkill(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0]): void {
   c.reset("skillOpen");
   for (const l of LANES) if (c.lamp(l) === "lit") c.setLamp(l, "off");
+}
+
+/**
+ * A ramp shot (the Leaf or the Root Ramp): the ball crosses the mouth gate going up (kind gateAB)
+ * and later the exit gate going out (gateAB). A ball that rolls back out of the mouth (gateBA)
+ * loses its trip, and a ball that falls onto the exit from the dome (gateBA) pays nothing.
+ */
+const RAMPS = { leafEnter: ["leaf", "enter"], leafExit: ["leaf", "exit"], rootEnter: ["root", "enter"], rootExit: ["root", "exit"] } as const;
+function ramp(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], e: { sw: string; kind: string }): void {
+  if (!Object.hasOwn(RAMPS, e.sw)) return;
+  const [name, end] = RAMPS[e.sw as keyof typeof RAMPS];
+  const key = `${name}In`;
+  if (end === "enter") {
+    if (e.kind === "gateAB") c.add(key);
+    else c.reset(key); // back out of the mouth: the trip is off
+  } else if (e.kind === "gateAB" && c.count(key) > 0) {
+    c.reset(key);
+    c.addScore(RAMP_SHOT);
+    c.emit({ c: "dmd", show: { id: `${name}Ramp`, args: { points: RAMP_SHOT } } });
+  }
 }
 
 /**
@@ -41,6 +61,7 @@ export const colonyRules: TableRules = {
       return;
     }
     closeSkill(c);
+    ramp(c, e);
     const points = Object.hasOwn(SWITCH_POINTS, e.sw) ? SWITCH_POINTS[e.sw]! : 0;
     if (points > 0 && (e.kind === "kick" || !KICK_ONLY.has(e.sw))) c.addScore(points);
   },
@@ -53,6 +74,8 @@ export const colonyRules: TableRules = {
   },
   onDrain(c) {
     closeSkill(c);
+    c.reset("leafIn");
+    c.reset("rootIn");
   },
   bonus: () => 0,
 };
