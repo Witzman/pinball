@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createGame, tick } from "../../src/sim/game";
 import { demoTable } from "../../src/tables/demo";
+import { restGrid } from "../helpers/rest-grid";
 
 /** Drops a ball at rest at (x, y) mm, flippers down, and ticks until it drains; false if it is still on the table after `ticks`. */
 function drains(x: number, y: number, ticks = 25000): boolean {
@@ -19,14 +20,8 @@ describe("the demo table has no place where a ball rests for ever", () => {
   });
 
   it("drains a ball dropped anywhere on a grid over the playfield (not in the sealed corner behind the deflector)", () => {
-    const stuck: string[] = [];
-    for (let y = 40; y <= 960; y += 74) {
-      for (let x = 22; x <= 470; x += 58) {
-        if (y < x - 390) continue; // above the deflector line (395,5)-(515,125): a ball cannot get there
-        if (!drains(x, y)) stuck.push(`(${x},${y})`);
-      }
-    }
-    expect(stuck).toEqual([]);
+    // above the deflector line (395,5)-(515,125) a ball cannot get there
+    expect(restGrid(demoTable, { x: [22, 470, 58], y: [40, 960, 74], skip: (x, y) => y < x - 390 })).toEqual([]);
   });
 
   it("has a deflector that runs from the top wall to the right wall: nothing is left behind it", () => {
