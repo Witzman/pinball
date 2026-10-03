@@ -94,8 +94,10 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
   if (opts.state && opts.flow && opts.state.game) {
     const g = opts.state.game;
     // phases the flow cannot leave would hold a restored game forever
-    if (g.phase === "bonus" || g.phase === "buyin") problems.push(`saved state is in phase "${g.phase}", which this flow does not run yet`);
-    if (g.phase === "over" && !Object.hasOwn(opts.state.timers, "flow.over")) problems.push('saved state is in phase "over" without its flow.over timer');
+    if (g.phase === "buyin") problems.push(`saved state is in phase "${g.phase}", which this flow does not run yet`);
+    for (const [phase, timer] of [["over", "flow.over"], ["bonus", "flow.bonus"]] as const) {
+      if (g.phase === phase && !Object.hasOwn(opts.state.timers, timer)) problems.push(`saved state is in phase "${phase}" without its ${timer} timer`);
+    }
   }
   if (problems.length > 0) throw new Error(`rules cannot start:\n${problems.join("\n")}`);
 
@@ -255,6 +257,15 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
         out.push({ c: "feedBall", feed: "plunger" });
       },
     },
+    game: {
+      phase: () => (flow ? flow.phase() : "play"),
+      extraBall: () => (flow ? flow.extraBall() : false),
+      saver(ticks) {
+        needTicks("game.saver", ticks);
+        if (flow) flow.saver(ticks);
+        else state.balls.saver.until = ctx.now + ticks;
+      },
+    },
     emit: (cmd) => {
       out.push(cmd);
     },
@@ -283,15 +294,43 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
             resetting = false;
           }
         },
+        stopPlay() {
+          resetting = true;
+          try {
+            stopActivity();
+          } finally {
+            resetting = false;
+          }
+        },
+        awardBonus() {
+          // the table's bonus functions only read: no starting modes or feeding balls from them
+          resetting = true;
+          try {
+            const total = table.bonus ? table.bonus(ctx) : 0;
+            const parts = table.bonusParts ? table.bonusParts(ctx) : [];
+            if (total !== 0) ctx.addScore(total);
+            out.push({ c: "dmd", show: { id: "bonus", args: { total } } });
+            for (const [label, value] of parts) out.push({ c: "dmd", show: { id: "bonusPart", args: { label, value } } });
+            return total;
+          } finally {
+            resetting = false;
+          }
+        },
+        now: () => ctx.now,
         feed: () => ctx.ball.feed(),
       })
     : null;
 
-  function clearTable(keepPersist: boolean): void {
+  /** Stops what is going on on the table: modes (with their exit handlers), table timers, shot progress. */
+  function stopActivity(): void {
     for (const id of Object.keys(state.modes).sort(byId)) ctx.stop(id);
     for (const id of Object.keys(state.timers)) if (!id.startsWith(FLOW_TIMER)) delete state.timers[id];
     dueKnown = false;
     state.shots = {};
+  }
+
+  function clearTable(keepPersist: boolean): void {
+    stopActivity();
     for (const id of Object.keys(state.lamps).sort(byId)) {
       if (keepPersist && persisted.has(id)) continue;
       if (state.lamps[id] === "lit") out.push({ c: "setLamp", lamp: id, state: "off" });
@@ -383,6 +422,7 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
       }
       if (!flow.admits()) return; // between balls and games the table is not playing
     }
+    if (flow && e.t === "switch") flow.switchSeen(e.tick);
     toModes(e);
     if (e.t === "switch") {
       table.onSwitch?.(ctx, e);
