@@ -79,6 +79,10 @@ export interface GameState {
   bought: boolean;
   tilted: boolean;
   replayDone: boolean;
+  /** Extra balls awarded in this game, against the config's limit. */
+  extraBalls: number;
+  /** The ball saver is set to start at the ball's first switch: true until that switch. */
+  saverWait: boolean;
   /** Scores of the machine, highest first. */
   board: { main: number[]; bought: number[] };
 }
@@ -127,6 +131,14 @@ export interface Ctx {
   stop(id: string): void;
   goto(id: string, phase: string): void;
   ball: { lock(lockId: string): void; release(lockId: string): void; feed(): void; inPlay(): number };
+  game: {
+    /** Where the game is; `play` for a table without a flow. */
+    phase(): GameState["phase"];
+    /** Awards an extra ball, served after this ball's bonus. False when none is left or no ball is being played. */
+    extraBall(): boolean;
+    /** The ball saver runs for `ticks` from now: a drain of the last ball in that time serves it again. */
+    saver(ticks: number): void;
+  };
   emit(cmd: Command): void;
   addScore(n: number): void;
 }
@@ -147,6 +159,10 @@ export interface ModeDef {
 /** What `src/tables/<id>/rules.ts` returns. */
 export interface TableRules {
   modes: Record<string, ModeDef>;
+  /** End-of-ball bonus in points, read when a ball ends (counters, multiplier and all). */
+  bonus?(c: Ctx): number;
+  /** The parts of that bonus for the display, as [label, points]. */
+  bonusParts?(c: Ctx): [string, number][];
   /** Names of lamps and counters that survive from one ball to the next (a new game clears them too). */
   persist?: string[];
   onSwitch?(c: Ctx, e: SwitchEvent): void;

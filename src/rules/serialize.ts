@@ -78,10 +78,10 @@ export function validateState(s: unknown): string[] {
   if (g !== null) {
     if (
       !isRecord(g) || typeof g.phase !== "string" || !PHASES.includes(g.phase) || !isNat(g.credits) || !isNat(g.shootAgain) ||
-      typeof g.bought !== "boolean" || typeof g.tilted !== "boolean" || typeof g.replayDone !== "boolean" ||
+      typeof g.bought !== "boolean" || typeof g.tilted !== "boolean" || typeof g.replayDone !== "boolean" || !isNat(g.extraBalls) || typeof g.saverWait !== "boolean" ||
       !isRecord(g.board) || !isBoard(g.board.main) || !isBoard(g.board.bought)
     ) {
-      errs.push("game must be null or {phase, credits, shootAgain, bought, tilted, replayDone, board {main, bought} sorted highest first}");
+      errs.push("game must be null or {phase, credits, shootAgain, bought, tilted, replayDone, extraBalls, saverWait, board {main, bought} sorted highest first}");
     }
   }
   const p = s.player;

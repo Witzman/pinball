@@ -3,7 +3,7 @@ import { createRules, hashRules, restore, serialize } from "../../src/rules";
 import type { FlowConfig, RulesEvent, TableRules } from "../../src/rules";
 import { harness } from "./harness";
 
-const cfg: FlowConfig = { ballsPerGame: 3, startCost: 1, startCredits: 2, overTicks: 100 };
+const cfg: FlowConfig = { ballsPerGame: 3, startCost: 1, startCredits: 2, overTicks: 100, saverTicks: 0, bonusTicks: 1, extraBallMax: 0 };
 
 const table: TableRules = {
   modes: {
@@ -119,9 +119,9 @@ describe("the game flow", () => {
     expect(h.state.game!.phase).toBe("over");
     expect(h.cmds.filter((c) => c.c === "gameOver")).toEqual([{ c: "gameOver", score: 300, bought: false }]);
     expect(h.state.player.score).toBe(300);
-    h.run(189);
-    expect(h.state.game!.phase).toBe("over"); // the game-over time runs from the last drain at tick 90
     h.run(190);
+    expect(h.state.game!.phase).toBe("over"); // the bonus (1 tick) ends at 91, the game-over time runs 100 ticks from there
+    h.run(191);
     expect(h.state.game!.phase).toBe("attract");
     expect(h.state.timers).toEqual({});
   });
@@ -277,11 +277,14 @@ describe("saving a game in every phase", () => {
     expect(() => createRules(table, { seed: 1, flow: cfg, state: saved })).not.toThrow();
     delete saved.timers["flow.over"];
     expect(() => createRules(table, { seed: 1, flow: cfg, state: saved })).toThrow(/"over" without its flow.over timer/);
-    for (const phase of ["bonus", "buyin"] as const) {
-      const s = restore(serialize(over.state));
-      s.game!.phase = phase;
-      expect(() => createRules(table, { seed: 1, flow: cfg, state: s })).toThrow(new RegExp(`phase "${phase}", which this flow does not run yet`));
-    }
+    const buyin = restore(serialize(over.state));
+    buyin.game!.phase = "buyin";
+    expect(() => createRules(table, { seed: 1, flow: cfg, state: buyin })).toThrow(/phase "buyin", which this flow does not run yet/);
+    const bonus = restore(serialize(over.state));
+    bonus.game!.phase = "bonus";
+    expect(() => createRules(table, { seed: 1, flow: cfg, state: bonus })).toThrow(/"bonus" without its flow.bonus timer/);
+    bonus.timers["flow.bonus"] = { due: 5000 };
+    expect(() => createRules(table, { seed: 1, flow: cfg, state: bonus })).not.toThrow();
   });
 
   it("keeps the saved game's credits and phase through restore", () => {
