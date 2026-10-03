@@ -55,4 +55,19 @@ describe("the shipping tables' setups", () => {
     expect(heat).toEqual([false, false, false, false, true]);
     expect(g.rules.state.game!.tiltHeat).toBe(5);
   });
+
+  it("lets a ball the flippers miss drain by gravity alone, so the game goes on to the next ball", () => {
+    const g = createGame(demoTable, tableSetups.demo!);
+    g.input.start = true;
+    advance(g, 5);
+    g.input.start = false;
+    advance(g, 5);
+    expect(g.rules.state.player.ballNo).toBe(1);
+    const b = g.table.world.balls[0]!;
+    Object.assign(b, { x: 0.26, y: 0.95, vx: 0, vy: 0 }); // between the flippers, which stay down
+    for (let i = 0; i < 20; i++) advance(g, 50); // a second of play, gravity only
+    for (let i = 0; i < 100 && g.rules.state.player.ballNo === 1; i++) advance(g, 50);
+    expect(g.rules.state.player.ballNo).toBe(2);
+    expect(g.rules.state.game!.phase).toBe("play");
+  });
 });

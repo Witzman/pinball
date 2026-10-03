@@ -12,8 +12,10 @@ export const demoTable: TableDef = {
     plunger: { e: 0.2, mu: 0 },
   },
   walls: [
-    // outer box
-    { type: "polyline", points: [[5, 5], [515, 5], [515, 1045], [5, 1045]], closed: true, material: "metal" },
+    // outer box: open at the bottom between the left wall and the plunger lane, so a ball the flippers miss falls out of the table (the drain)
+    { type: "polyline", points: [[5, 1045], [5, 5], [515, 5], [515, 1045]], material: "metal" },
+    // the floor of the plunger lane: the pulled plunger and its ball stop here
+    { type: "segment", a: [483, 1045], b: [515, 1045], material: "metal" },
     // a guide and an arc
     { type: "segment", a: [5, 800], b: [180, 900], material: "rubber" },
     { type: "arc", c: [260, 260], r: 240, from: 200, to: 340, chords: 24, material: "metal" },

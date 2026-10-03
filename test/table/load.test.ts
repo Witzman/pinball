@@ -68,7 +68,7 @@ describe("loadTable", () => {
     expect(() => loadTable(def)).toThrow(/material "glass"/);
   });
 
-  it("keeps a dropped ball inside the demo table, deterministically", () => {
+  it("lets a ball dropped on the demo table fall out through the bottom (the drain), deterministically", () => {
     const hashes = [0, 1].map(() => {
       const t = loadTable(demoTable);
       t.world.balls.push(makeBall(t, 260, 100));
@@ -76,8 +76,7 @@ describe("loadTable", () => {
       const b = t.world.balls[0]!;
       expect(b.x).toBeGreaterThan(0);
       expect(b.x).toBeLessThan(demoTable.playfield.width / 1000);
-      expect(b.y).toBeGreaterThan(0);
-      expect(b.y).toBeLessThan(demoTable.playfield.length / 1000);
+      expect(b.y).toBeGreaterThan(demoTable.playfield.length / 1000); // out of the table: nothing holds it at the bottom
       return hashWorld(t.world);
     });
     expect(hashes[0]).toBe(hashes[1]);

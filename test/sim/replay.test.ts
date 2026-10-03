@@ -50,21 +50,25 @@ describe("replay runner", () => {
     expect(a).not.toBe(b);
   });
 
-  it("launches the ball off the plunger in the shipped replays", () => {
-    const idle = runReplay(file("idle"), allTables).game.table.world.balls[0]!;
+  it("launches the ball off the plunger in the shipped replays: it goes round the table and drains, which the idle replay never does", () => {
+    expect(runReplay(file("idle"), allTables).game.drains).toBe(0);
     for (const n of ["launch-and-flip", "flipper-hammering"]) {
-      const b = runReplay(file(n), allTables).game.table.world.balls[0]!;
-      expect(Math.hypot(b.x - idle.x, b.y - idle.y), n).toBeGreaterThan(0.1);
+      expect(runReplay(file(n), allTables).game.drains, n).toBeGreaterThan(0);
     }
   });
 
-  it("makes the ball meet the flippers in the shipped replays: without the flipper inputs it ends elsewhere", () => {
+  it("makes the ball meet the flippers in the shipped replays: at some moment the ball is elsewhere than without the flipper inputs", () => {
     for (const n of ["launch-and-flip", "flipper-hammering"]) {
       const r = file(n);
       const plungeOnly = { ...r, inputs: r.inputs.filter((i) => i.action.startsWith("plunge")) };
-      const a = runReplay(r, allTables).game.table.world.balls[0]!;
-      const b = runReplay(plungeOnly, allTables).game.table.world.balls[0]!;
-      expect(Math.hypot(a.x - b.x, a.y - b.y), n).toBeGreaterThan(0.01);
+      let apart = 0;
+      for (let ticks = 250; ticks <= r.header.ticks; ticks += 250) {
+        const upTo = (x: typeof r) => ({ header: { ...r.header, ticks }, inputs: x.inputs.filter((i) => i.tick < ticks) });
+        const a = runReplay(upTo(r), allTables).game.table.world.balls[0]!;
+        const b = runReplay(upTo(plungeOnly), allTables).game.table.world.balls[0]!;
+        apart = Math.max(apart, Math.hypot(a.x - b.x, a.y - b.y));
+      }
+      expect(apart, n).toBeGreaterThan(0.01);
     }
   });
 
