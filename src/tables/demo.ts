@@ -23,6 +23,9 @@ export const demoTable: TableDef = {
     { type: "segment", a: [515, 205], b: [483, 250], material: "metal", oneWay: true },
     // deflector at the top of the lane: steers the ball left, into the playfield
     { type: "segment", a: [420, 30], b: [515, 125], material: "metal" },
+    // the rails of the ramp on the left (zone 1: a ball on the ramp touches only these)
+    { type: "segment", a: [40, 600], b: [40, 300], material: "metal", zones: [1] },
+    { type: "segment", a: [100, 600], b: [100, 300], material: "metal", zones: [1] },
     // a standup target
     { type: "segment", a: [300, 500], b: [380, 500], material: "rubber", switch: "target1" },
   ],
@@ -30,6 +33,12 @@ export const demoTable: TableDef = {
     { at: [200, 400], r: 12, material: "rubber" },
     { at: [320, 420], r: 12, material: "rubber" },
   ],
+  // a ramp: up from its mouth at y=600 to its exit at y=300; the gates join the playfield (zone 0) and the ramp (zone 1)
+  gates: [
+    { a: [40, 600], b: [100, 600], zoneA: 0, zoneB: 1 },
+    { a: [40, 300], b: [100, 300], zoneA: 1, zoneB: 0 },
+  ],
+  visual: { heights: [0, 30], ramps: [{ zone: 1, path: [[70, 600], [70, 300]], width: 60 }] },
   plunger: { at: [499, 1030], dirDeg: -90, width: 32, stroke: 80, maxSpeed: 5, pullSpeed: 0.2, material: "plunger" },
   flippers: [
     { id: "left", pivot: [150, 900], length: 60, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber" },

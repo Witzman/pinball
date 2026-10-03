@@ -60,6 +60,16 @@ export function drawScene(ctx: CanvasRenderingContext2D, cw: number, ch: number,
   ctx.fillStyle = "#151a2b";
   ctx.fillRect(v.ox, v.oy, scene.width * v.scale, scene.length * v.scale);
 
+  // ramps lie under everything else: a wide band along the centre line
+  for (const r of scene.ramps) {
+    ctx.strokeStyle = "rgba(154, 166, 196, 0.18)";
+    ctx.lineWidth = r.width * v.scale;
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    r.path.forEach((q, i) => (i === 0 ? ctx.moveTo(X(q.x), Y(q.y)) : ctx.lineTo(X(q.x), Y(q.y))));
+    ctx.stroke();
+  }
+
   ctx.lineWidth = Math.max(1.5, 0.003 * v.scale);
   ctx.lineCap = "round";
   for (const s of scene.walls) {
@@ -107,9 +117,17 @@ export function drawScene(ctx: CanvasRenderingContext2D, cw: number, ch: number,
   for (const f of snap.flippers) drawFlipper(ctx, v, f);
 
   for (const b of snap.balls) {
+    // a ball above the playfield is drawn higher up the screen, with its shadow where it would be on the playfield
+    const lift = b.z * v.scale;
+    if (b.z > 0) {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.beginPath();
+      ctx.arc(X(b.x), Y(b.y), b.r * v.scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.fillStyle = "#d9dde8";
     ctx.beginPath();
-    ctx.arc(X(b.x), Y(b.y), b.r * v.scale, 0, Math.PI * 2);
+    ctx.arc(X(b.x), Y(b.y) - lift, b.r * v.scale, 0, Math.PI * 2);
     ctx.fill();
   }
 }

@@ -18,6 +18,10 @@ export interface LoadedTable {
   playfieldLength: number;
   ballRadius: number;
   ballMass: number;
+  /** Height of each zone's level above the playfield, metres; index = zone. Presentation only. */
+  heights: number[];
+  /** Drawn ramps (#21), metres. */
+  ramps: { zone: number; path: { x: number; y: number }[]; width: number }[];
 }
 
 const MM = 1 / 1000;
@@ -109,7 +113,7 @@ export function loadTable(def: TableDef): LoadedTable {
     : null;
 
   const world = createWorld({ balls: [], segments, circles, gates, triggers, magnets, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg) });
-  return { world, flipperIds: def.flippers.map((f) => f.id), triggerIds: (def.triggers ?? []).map((t) => t.id), magnetIds: (def.magnets ?? []).map((m) => m.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM };
+  return { world, flipperIds: def.flippers.map((f) => f.id), triggerIds: (def.triggers ?? []).map((t) => t.id), magnetIds: (def.magnets ?? []).map((m) => m.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM, heights: (def.visual?.heights ?? []).map((h) => h * MM), ramps: (def.visual?.ramps ?? []).map((r) => ({ zone: r.zone, path: r.path.map((q) => ({ x: q[0] * MM, y: q[1] * MM })), width: r.width * MM })) };
 }
 
 /** A resting ball at (x, y) millimetres on the playfield. */

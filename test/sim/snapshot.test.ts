@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { advance, createGame } from "../../src/sim/game";
-import { buildScene, snapshot, topCamera } from "../../src/sim/snapshot";
+import { cameraFor, tiltedCamera, topCamera } from "../../src/sim/camera";
+import { buildScene, snapshot } from "../../src/sim/snapshot";
 import { demoTable } from "../../src/tables/demo";
 import { tableSetups } from "../../src/tables";
 
@@ -110,5 +111,72 @@ describe("buildScene", () => {
     const sc = buildScene(g.table);
     w.segments.forEach((s, i) => expect(sc.walls[i]!.kind).toBe(s.sw > 0 ? "switch" : s.e > 0.5 ? "rubber" : "wall"));
     expect(new Set(sc.walls.map((x) => x.kind)).size).toBeGreaterThan(1);
+  });
+});
+
+describe("height", () => {
+  function onRamp() {
+    const g = createGame(demoTable);
+    const b = g.table.world.balls[0]!;
+    Object.assign(b, { x: 0.07, y: 0.66, vx: 0, vy: -1.5, zone: 0 });
+    return { g, b };
+  }
+
+  it("a ball on the playfield is at height 0, and the scene carries the heights and the ramp", () => {
+    const g = createGame(demoTable);
+    expect(snapshot(g).balls[0]!.z).toBe(0);
+    const sc = buildScene(g.table);
+    expect(sc.heights).toEqual([0, 0.03]);
+    expect(sc.ramps).toEqual(g.table.ramps);
+    sc.heights[1] = 9;
+    expect(g.table.heights[1]).toBe(0.03); // a copy
+    sc.ramps[0]!.path[0]!.x = 9;
+    expect(g.table.ramps[0]!.path[0]!.x).toBe(0.07); // a copy
+  });
+
+  it("a ball rolled up the ramp is in zone 1 at the height of zone 1, and back at 0 after the exit", () => {
+    const { g, b } = onRamp();
+    let top = 0;
+    for (let i = 0; i < 400 && b.zone === 0; i++) advance(g, 1);
+    expect(b.zone).toBe(1);
+    expect(snapshot(g).balls[0]).toMatchObject({ zone: 1, z: 0.03 });
+    top = snapshot(g).balls[0]!.z;
+    for (let i = 0; i < 1500 && b.zone === 1; i++) advance(g, 1);
+    expect(b.zone).toBe(0);
+    expect(snapshot(g).balls[0]!.z).toBe(0);
+    expect(top).toBeGreaterThan(0);
+  });
+
+  it("a zone without a height reads as 0, so a table with no visual still snapshots", () => {
+    const g = createGame(demoTable);
+    g.table.world.balls[0]!.zone = 5;
+    expect(snapshot(g).balls[0]!.z).toBe(0);
+  });
+});
+
+describe("camera", () => {
+  it("top is the whole playfield from above", () => {
+    expect(topCamera(0.52, 1.05)).toEqual({ mode: "top", cx: 0.26, cy: 0.525, zoom: 1, pitchDeg: 0, yawDeg: 0, fovDeg: 0 });
+    const g = createGame(demoTable);
+    expect(snapshot(g).camera).toEqual(topCamera(g.table.playfieldWidth, g.table.playfieldLength));
+  });
+
+  it("tilted looks up the table at the ball, kept inside the playfield, and is a pure function of its inputs", () => {
+    const a = tiltedCamera(0.52, 1.05, { x: 0.3, y: 0.8 });
+    expect(a).toEqual(tiltedCamera(0.52, 1.05, { x: 0.3, y: 0.8 }));
+    expect(a).toMatchObject({ mode: "tilted", cx: 0.26, cy: 0.8 });
+    expect(a.pitchDeg).toBeGreaterThan(0);
+    expect(a.fovDeg).toBeGreaterThan(0);
+    expect(tiltedCamera(0.52, 1.05, { x: 0, y: 5 }).cy).toBe(1.05);
+    expect(tiltedCamera(0.52, 1.05, { x: 0, y: -5 }).cy).toBe(0);
+    expect(tiltedCamera(0.52, 1.05, null).cy).toBe(0.525);
+  });
+
+  it("the snapshot takes the mode asked for, and cameraFor picks by mode", () => {
+    const g = createGame(demoTable);
+    const b = g.table.world.balls[0]!;
+    expect(snapshot(g, [], "tilted").camera).toEqual(tiltedCamera(g.table.playfieldWidth, g.table.playfieldLength, b));
+    expect(cameraFor("top", 1, 2, null).mode).toBe("top");
+    expect(cameraFor("tilted", 1, 2, null).mode).toBe("tilted");
   });
 });

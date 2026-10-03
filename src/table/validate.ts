@@ -148,6 +148,25 @@ export function validateTable(t: TableDef): string[] {
     if (pl.maxSpeed * DT * 1000 > t.ball.radius) fail("plunger: release too fast (face moves more than one ball radius per tick)");
   }
 
+  const vis = t.visual;
+  if (vis) {
+    const hs = vis.heights ?? [];
+    if (hs.length > MAX_ZONE + 1) fail(`visual: at most ${MAX_ZONE + 1} heights`);
+    hs.forEach((h, z) => {
+      if (!(Number.isFinite(h) && h >= 0)) fail(`visual: height of zone ${z} must be a number >= 0`);
+    });
+    if (hs.length > 0 && hs[0] !== 0) fail("visual: the height of zone 0 (the playfield) must be 0");
+    (vis.ramps ?? []).forEach((r, i) => {
+      const where = `visual ramp #${i}`;
+      checkZones(where, [r.zone]);
+      if (r.zone === 0) fail(`${where}: zone 0 is the playfield, a ramp lies in zone 1 or above`);
+      if (!(r.zone < hs.length)) fail(`${where}: zone ${r.zone} has no height in visual.heights`);
+      if (r.path.length < 2) fail(`${where}: needs at least 2 path points`);
+      if (!r.path.every(inside)) fail(`${where}: outside the playfield`);
+      if (!(r.width > 0 && r.width <= t.playfield.width)) fail(`${where}: width must be positive and fit the playfield`);
+    });
+  }
+
   for (const [name, u] of users) {
     if (u.count > 1 && !u.allShared) fail(`switch "${name}" is used by ${u.count} colliders; mark all of them shared: true or rename`);
   }
