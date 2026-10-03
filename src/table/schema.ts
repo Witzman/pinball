@@ -40,6 +40,12 @@ interface WallBase {
    */
   oneWay?: boolean;
   kick?: KickDef;
+  /**
+   * Makes this a drop target (#50): the name the rules put it down and up by. Colliders that
+   * share a name (a polyline's pieces, several walls) go down and come up together. A down
+   * target does not exist: balls pass over it and it reports nothing. All targets start up.
+   */
+  ref?: string;
 }
 
 export interface SegmentDef extends WallBase {
@@ -75,6 +81,8 @@ export interface PostDef {
   switch?: string;
   shared?: boolean;
   kick?: KickDef;
+  /** A drop target, as on a wall. */
+  ref?: string;
 }
 
 /**
@@ -201,6 +209,8 @@ export interface TableDef {
   visual?: VisualDef;
   /** How a switch sounds (#15): a class per switch name; without one the sound layer picks by what was hit. */
   sounds?: Record<string, SoundClass>;
+  /** Drop-target banks (#50): a name for a list of drop-target refs, so the rules can bring a whole bank up with one command. */
+  dropBanks?: Record<string, string[]>;
   /** Named shots: ordered lists of switch names the rules treat as one shot. */
   shots: Record<string, string[]>;
 }

@@ -130,6 +130,20 @@ export function setMagnet(g: Game, id: string, on: boolean): void {
   g.table.world.magnets[mi]!.on = on;
 }
 
+/** Puts the drop target `id` down or up (#50). A target brought up under a ball leaves the ball overlapping it: the rules should not raise one while a ball is on it. */
+export function setDropTarget(g: Game, id: string, state: "up" | "down"): void {
+  const i = g.table.dropIds.indexOf(id);
+  if (i < 0) throw new Error(`unknown drop target "${id}"`);
+  g.table.world.down[i] = state === "down" ? 1 : 0;
+}
+
+/** Brings every drop target of the bank up (the reset of a bank). */
+export function resetDropBank(g: Game, bank: string): void {
+  const list = g.table.dropBanks[bank];
+  if (!list) throw new Error(`unknown drop bank "${bank}"`);
+  for (const i of list) g.table.world.down[i] = 0;
+}
+
 /**
  * Asks for a nudge: it is applied at the start of the next tick, to every free ball.
  * Dropped (false) while another is waiting, the last one was less than the cooldown ago,
@@ -198,6 +212,8 @@ function buttonEvents(g: Game, tick: number, out: RulesEvent[]): void {
 function applyCommands(g: Game, cmds: readonly Command[]): void {
   for (const cmd of cmds) {
     if (cmd.c === "magnet") setMagnet(g, cmd.id, cmd.on);
+    else if (cmd.c === "dropTarget") setDropTarget(g, cmd.id, cmd.state);
+    else if (cmd.c === "dropBank") resetDropBank(g, cmd.bank);
     else if (cmd.c === "fireSolenoid") kickTrigger(g, cmd.id);
     else if (cmd.c === "feedBall") {
       g.table.world.balls.push(newBall(g));
@@ -311,6 +327,7 @@ export function recover(g: Game, error: unknown): void {
   w.balls.length = 0;
   for (const m of w.magnets) m.on = false;
   w.kickWait.fill(0); // a recovered world hashes like a fresh one
+  w.down.fill(0);
   g.rules = createRules(options.rules ?? (options.flow ? { modes: {} } : freePlay), {
     seed: options.seed ?? 1,
     shots: def.shots,

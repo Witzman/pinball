@@ -42,6 +42,8 @@ export interface Segment {
   kickCd?: number;
   /** Index into `World.kickWait`; the chords of one polyline or arc share it. */
   kid?: number;
+  /** Drop target (#50): 1 + the index into `World.down`; while that flag is set the wall does not exist. Absent = always there. */
+  drop?: number;
 }
 
 export interface Circle {
@@ -57,6 +59,8 @@ export interface Circle {
   kickMin?: number;
   kickCd?: number;
   kid?: number;
+  /** Drop target, as on Segment. */
+  drop?: number;
 }
 
 /**
@@ -236,6 +240,8 @@ export interface World {
   spinDamping: number;
   /** Ticks left of each kicker's cooldown (index = `kid`); empty without kickers. */
   kickWait: Int32Array;
+  /** Drop targets (#50): 1 = down, per target, in the order of `LoadedTable.dropIds`; all up (0) at the start. Empty without drop targets. */
+  down: Uint8Array;
   grid: Grid;
   contacts: ContactBuffer;
   tick: number;

@@ -14,6 +14,9 @@ export interface LoadedTable {
   triggerIds: string[];
   /** Magnet ids in the order of world.magnets. */
   magnetIds: string[];
+  /** Drop-target refs in the order of world.down (#50), and each bank as the indices of its targets. */
+  dropIds: string[];
+  dropBanks: Record<string, number[]>;
   /** Switch names; a collider's `sw` is the 1-based index into this list. */
   switchNames: string[];
   /** Playfield size, metres. */
@@ -60,6 +63,14 @@ export function loadTable(def: TableDef): LoadedTable {
     return i + 1;
   };
 
+  const dropIds: string[] = [];
+  /** The collider field of a drop target (#50); nothing for a plain collider. */
+  const dropField = (ref: string | undefined) => {
+    if (ref === undefined) return {};
+    let i = dropIds.indexOf(ref);
+    if (i < 0) i = dropIds.push(ref) - 1;
+    return { drop: i + 1 };
+  };
   const segments: Segment[] = [];
   const circles: Circle[] = [];
   let kickers = 0; // one cooldown per kicker as the table defines it: the chords of a polyline or arc share it
@@ -71,7 +82,7 @@ export function loadTable(def: TableDef): LoadedTable {
 
   for (const w of def.walls) {
     const mat = def.materials[w.material]!;
-    const base = { e: mat.e, mu: mat.mu, zoneMask: zoneMask(w.zones), sw: swId(w.switch), ...(w.oneWay === true ? { oneWay: true } : {}), ...kickFields(w.kick) };
+    const base = { e: mat.e, mu: mat.mu, zoneMask: zoneMask(w.zones), sw: swId(w.switch), ...(w.oneWay === true ? { oneWay: true } : {}), ...kickFields(w.kick), ...dropField(w.ref) };
     let pts: Point[];
     if (w.type === "segment") pts = [w.a, w.b];
     else if (w.type === "polyline") pts = w.closed ? [...w.points, w.points[0]!] : w.points;
@@ -85,7 +96,7 @@ export function loadTable(def: TableDef): LoadedTable {
 
   for (const p of def.posts) {
     const mat = def.materials[p.material]!;
-    circles.push({ x: p.at[0] * MM, y: p.at[1] * MM, r: p.r * MM, e: mat.e, mu: mat.mu, zoneMask: zoneMask(p.zones), sw: swId(p.switch), ...kickFields(p.kick) });
+    circles.push({ x: p.at[0] * MM, y: p.at[1] * MM, r: p.r * MM, e: mat.e, mu: mat.mu, zoneMask: zoneMask(p.zones), sw: swId(p.switch), ...kickFields(p.kick), ...dropField(p.ref) });
   }
 
   const gates: Gate[] = (def.gates ?? []).map((g) => ({
@@ -123,8 +134,8 @@ export function loadTable(def: TableDef): LoadedTable {
       })
     : null;
 
-  const world = createWorld({ balls: [], segments, circles, gates, triggers, magnets, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg), kickWait: new Int32Array(kickers) });
-  return { world, flipperIds: def.flippers.map((f) => f.id), flipperInputs: def.flippers.map((f) => f.input ?? (f.id === "left" || f.id === "right" ? f.id : null)), triggerIds: (def.triggers ?? []).map((t) => t.id), magnetIds: (def.magnets ?? []).map((m) => m.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM, heights: (def.visual?.heights ?? []).map((h) => h * MM), sounds: { ...(def.sounds ?? {}) }, ramps: (def.visual?.ramps ?? []).map((r) => ({ zone: r.zone, path: r.path.map((q) => ({ x: q[0] * MM, y: q[1] * MM })), width: r.width * MM, heights: (r.heights ?? r.path.map(() => def.visual?.heights?.[r.zone] ?? 0)).map((h) => h * MM) })) };
+  const world = createWorld({ balls: [], segments, circles, gates, triggers, magnets, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg), kickWait: new Int32Array(kickers), down: new Uint8Array(dropIds.length) });
+  return { world, flipperIds: def.flippers.map((f) => f.id), flipperInputs: def.flippers.map((f) => f.input ?? (f.id === "left" || f.id === "right" ? f.id : null)), triggerIds: (def.triggers ?? []).map((t) => t.id), magnetIds: (def.magnets ?? []).map((m) => m.id), dropIds, dropBanks: Object.fromEntries(Object.entries(def.dropBanks ?? {}).map(([bank, list]) => [bank, list.map((r) => dropIds.indexOf(r))])), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM, heights: (def.visual?.heights ?? []).map((h) => h * MM), sounds: { ...(def.sounds ?? {}) }, ramps: (def.visual?.ramps ?? []).map((r) => ({ zone: r.zone, path: r.path.map((q) => ({ x: q[0] * MM, y: q[1] * MM })), width: r.width * MM, heights: (r.heights ?? r.path.map(() => def.visual?.heights?.[r.zone] ?? 0)).map((h) => h * MM) })) };
 }
 
 /** A resting ball at (x, y) millimetres on the playfield. */
