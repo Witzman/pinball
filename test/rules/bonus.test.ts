@@ -260,10 +260,10 @@ describe("ball end edge cases", () => {
     const byHand: TableRules = { modes: {}, onBallStart: (c) => c.game.saver(500), onSwitch: (c) => c.add("hits") };
     const h = harness(byHand, { flow: cfg });
     h.at(1).button("start", true).at(2).ballAtPlunger().run(3);
-    expect(h.state.balls.saver.until).toBe(503); // from the table's call at tick 2
+    expect(h.state.balls.saver.until).toBe(502); // from the table's call at tick 2
     h.at(20).hit("loop").run(21);
     expect(h.state.game!.saverWait).toBe(false);
-    expect(h.state.balls.saver.until).toBe(503); // the switch at 20 did not restart it as 320
+    expect(h.state.balls.saver.until).toBe(502); // the switch at 20 did not restart it as 320
   });
 
 });
