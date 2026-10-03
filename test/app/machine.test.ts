@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyCommands, createKeeper, fresh, MACHINE_KEY, parseStored, toMachine } from "../../src/app/machine";
+import { applyCommands, createKeeper, fresh, MACHINE_KEY, machineKey, parseStored, toMachine } from "../../src/app/machine";
 import type { StoredMachine } from "../../src/app/machine";
 import { memoryStore } from "../../src/storage";
 import type { Store } from "../../src/storage";
@@ -95,6 +95,21 @@ describe("the keeper", () => {
     await keeper.flush();
     const again = await createKeeper(store, opts).load();
     expect(again).toEqual({ credits: 1, boards: { main: [{ score: 1234, name: "AAA" }], bought: [] } });
+  });
+
+  it("keeps each table's machine under its own key; the demo keeps the key it always had", async () => {
+    expect(machineKey("demo")).toBe(MACHINE_KEY);
+    expect(machineKey("colony")).not.toBe(MACHINE_KEY);
+    const store = memoryStore();
+    const demo = createKeeper(store, { ...opts, key: machineKey("demo") });
+    const colony = createKeeper(store, { ...opts, key: machineKey("colony") });
+    await demo.load();
+    await colony.load();
+    colony.apply([{ c: "credits", n: 1 }]);
+    await colony.flush();
+    expect((await createKeeper(store, { ...opts, key: machineKey("demo") }).load()).credits).toBe(3); // the demo's credits are untouched
+    expect((await createKeeper(store, { ...opts, key: machineKey("colony") }).load()).credits).toBe(1);
+    expect(await store.get(MACHINE_KEY)).toBeNull();
   });
 
   it("cuts a stored board to the board size at load, so storage and the rules start in step", async () => {

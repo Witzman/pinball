@@ -4,11 +4,9 @@ import { advance, createGame, nudge, setPaused, takeCommands } from "../sim/game
 import type { GameInput } from "../sim/game";
 import { buildScene, snapshot } from "../sim/snapshot";
 import { localStore } from "../storage";
-import { demoTable } from "../tables/demo";
-import { demoFlow } from "../tables/demo-rules";
-import { tableSetups } from "../tables";
 import { hudLines } from "./hud";
-import { createKeeper, toMachine } from "./machine";
+import { createKeeper, machineKey, toMachine } from "./machine";
+import { chooseTable } from "./table-choice";
 
 const found = document.getElementById("table");
 if (!(found instanceof HTMLCanvasElement)) throw new Error("canvas #table missing");
@@ -19,14 +17,16 @@ const ctx: CanvasRenderingContext2D = context;
 const banner = document.getElementById("banner");
 
 async function boot(): Promise<void> {
+  const { def, setup, flow } = chooseTable(location.search);
   // what the machine remembers between visits: credits and scores
   const keeper = createKeeper(localStore(), {
-    startCredits: demoFlow.startCredits,
-    boardSize: demoFlow.boardSize ?? 10,
+    startCredits: flow.startCredits,
+    boardSize: flow.boardSize ?? 10,
+    key: machineKey(def.id),
     onError: (e) => console.error("could not save the machine", e),
   });
   const stored = await keeper.load();
-  const game = createGame(demoTable, { ...tableSetups.demo, machine: toMachine(stored) });
+  const game = createGame(def, { ...setup, machine: toMachine(stored) });
   const keys: GameInput = { left: false, right: false, plunge: false, coin: false, start: false, buyin: false };
   const touch = new TouchTracker(innerWidth, innerHeight);
   const renderer = createCanvasRenderer(ctx);
@@ -116,7 +116,7 @@ async function boot(): Promise<void> {
       reported = game.errorCount;
     }
     last = now;
-    renderer.draw(snapshot(game, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, demoFlow.startCost)));
+    renderer.draw(snapshot(game, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, flow.startCost)));
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

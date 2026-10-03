@@ -15,6 +15,11 @@ export interface StoredMachine {
 }
 
 export const MACHINE_KEY = "pinball/machine/v1";
+
+/** Where the machine of a table is kept: the demo keeps the key it always had, every other table its own, so credits and scores are not shared. */
+export function machineKey(tableId: string): string {
+  return tableId === "demo" ? MACHINE_KEY : `${MACHINE_KEY}/${tableId}`;
+}
 const DEFAULT_NAME = "AAA";
 
 export function fresh(startCredits: number): StoredMachine {
@@ -74,13 +79,14 @@ export interface Keeper {
 }
 
 /** Keeps the stored machine in step with the game. Saves run one after another; a failed save is reported, never thrown. */
-export function createKeeper(store: Store, opts: { startCredits: number; boardSize: number; onError?: (e: unknown) => void }): Keeper {
+export function createKeeper(store: Store, opts: { startCredits: number; boardSize: number; key?: string; onError?: (e: unknown) => void }): Keeper {
+  const key = opts.key ?? MACHINE_KEY;
   let machine = fresh(opts.startCredits);
   let loaded = false;
   let chain: Promise<void> = Promise.resolve();
   return {
     async load() {
-      machine = parseStored(await store.get(MACHINE_KEY).catch(() => null), opts.startCredits, opts.boardSize);
+      machine = parseStored(await store.get(key).catch(() => null), opts.startCredits, opts.boardSize);
       loaded = true;
       return structuredClone(machine);
     },
@@ -88,7 +94,7 @@ export function createKeeper(store: Store, opts: { startCredits: number; boardSi
       if (!loaded) throw new Error("keeper: load the machine before applying commands");
       if (!applyCommands(machine, cmds, opts.boardSize)) return;
       const text = JSON.stringify(machine);
-      chain = chain.then(() => store.set(MACHINE_KEY, text)).catch((e) => opts.onError?.(e));
+      chain = chain.then(() => store.set(key, text)).catch((e) => opts.onError?.(e));
     },
     flush: () => chain,
   };
