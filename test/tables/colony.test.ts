@@ -18,7 +18,7 @@ function drop(g: Game, x: number, y: number): void {
   Object.assign(g.table.world.balls[0]!, { x: x / 1000, y: y / 1000, vx: 0, vy: 0, zone: 0 });
 }
 
-/** Whether a ball centre at (x, y) mm would overlap a wall, a post or a flipper (a spawn artifact, not a place a ball can be). */
+/** Whether a ball centre at (x, y) mm would overlap a wall, a post or a flipper, or sit exactly above a wall end (spawn artifacts, not places a game reaches). */
 function insideWall(g: Game, x: number, y: number): boolean {
   const r = g.table.ballRadius * 1000;
   const near = (ax: number, ay: number, bx: number, by: number) => {
@@ -29,6 +29,8 @@ function insideWall(g: Game, x: number, y: number): boolean {
   };
   const w = g.table.world;
   if (w.segments.some((s) => near(s.ax * 1000, s.ay * 1000, s.bx * 1000, s.by * 1000))) return true;
+  // a ball centred exactly above the end of a wall balances on it: a knife edge, not a place a game reaches
+  if (w.segments.some((s) => [[s.ax, s.ay], [s.bx, s.by]].some(([px, py]) => Math.abs(x - px! * 1000) < 2 && py! * 1000 > y))) return true;
   if (w.circles.some((c) => Math.hypot(x - c.x * 1000, y - c.y * 1000) < r + c.r * 1000)) return true;
   return colonyTable.flippers.some((f) => {
     const a = (f.restDeg * Math.PI) / 180;
@@ -54,17 +56,17 @@ describe("The Colony, step 1: the outline", () => {
     expect(tableSetups.colony?.flow).toBeDefined();
   });
 
-  it("is the table of the spec: 520 x 1050 mm, 6.5 degrees, a 27 mm ball, a 58 mm flipper pair, one plunger", () => {
+  it("is the table of the spec: 520 x 1050 mm, 6.5 degrees, a 27 mm ball, a 58 mm flipper pair and the upper flipper, one plunger", () => {
     expect(colonyTable.playfield).toEqual({ width: 520, length: 1050, slopeDeg: 6.5 });
     expect(colonyTable.ball.radius * 2).toBe(27);
-    expect(colonyTable.flippers.map((f) => [f.id, f.length])).toEqual([["left", 58], ["right", 58]]);
+    expect(colonyTable.flippers.map((f) => [f.id, f.length, f.input ?? null])).toEqual([["left", 58, null], ["right", 58, null], ["upperLeft", 58, "left"]]);
     expect(colonyTable.plunger).toBeDefined();
   });
 
   it("has a skill shot of three lane switches up the plunger lane, and the frozen switch names", () => {
-    expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"] });
-    const names = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : []))].sort();
-    expect(names).toEqual(["inL", "inR", "kickbackL", "outL", "outR", "skill1", "skill2", "skill3", "slingL", "slingR"]);
+    expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"] });
+    const names = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : []))].sort();
+    expect(names).toEqual(["bumper1", "bumper2", "bumper3", "inL", "inR", "kickbackL", "outL", "outR", "rollO", "rollR", "rollW", "scout", "skill1", "skill2", "skill3", "slingL", "slingR"]);
   });
 
   it("lets no ball rest for ever: balls dropped at rest over a grid all drain", () => {
@@ -120,7 +122,7 @@ describe("The Colony, step 1: the outline", () => {
   });
 
   it("ends each inlane guide where the top edge of its resting flipper begins, in line with it: no notch for a ball to rest in", () => {
-    for (const f of colonyTable.flippers) {
+    for (const f of colonyTable.flippers.filter((x) => x.id === "left" || x.id === "right")) { // the upper flipper has no inlane
       const a = (f.restDeg * Math.PI) / 180;
       let nx = -Math.sin(a);
       let ny = Math.cos(a);
@@ -204,5 +206,72 @@ describe("The Colony, step 1: the outline", () => {
       if (ball) top = Math.min(top, ball.y);
     }
     expect(top).toBeGreaterThan(0.7); // no press: it only rolls down
+  });
+
+  it("pops the ball off each pop bumper with the kick speed, and the switch hears a kick", () => {
+    for (const [name, x, y] of [["bumper1", 260, 320], ["bumper2", 200, 395], ["bumper3", 320, 395]] as const) {
+      const kinds: string[] = [];
+      const rules: TableRules = { modes: {}, onSwitch: (_c, e) => void (e.sw === name && kinds.push(e.kind)) };
+      const g = createGame(colonyTable, { rules });
+      g.table.world.gravity = 0;
+      Object.assign(g.table.world.balls[0]!, { x: (x - 70) / 1000, y: y / 1000, vx: 1, vy: 0, zone: 0 }); // straight at it from the left
+      for (let i = 0; i < 150 && kinds.length === 0; i++) tick(g);
+      expect(kinds, name).toEqual(["kick"]); // and the speed is checked at the moment of the kick, before anything else is hit
+      expect(g.table.world.balls[0]!.vx, name).toBeLessThan(-1.9);
+    }
+  });
+
+  it("reports the rollover lanes at the top and the scout standup", () => {
+    for (const [x, y, sw] of [[190, 80, "rollW"], [260, 70, "rollO"], [330, 80, "rollR"]] as const) {
+      const { g, seen } = play();
+      drop(g, x, y);
+      drains(g);
+      expect(seen, sw).toContain(sw);
+    }
+    const { g, seen } = play();
+    g.table.world.gravity = 0;
+    Object.assign(g.table.world.balls[0]!, { x: 0.42, y: 0.62, vx: 0, vy: -1 }); // up at the scout from below
+    for (let i = 0; i < 100; i++) tick(g);
+    expect(seen).toContain("scout");
+  });
+
+  it("lifts a ball with the upper flipper: some timing of the left button sends a ball from the left wall far up the table", () => {
+    let best = 1;
+    for (let press = 100; press <= 1500; press += 20) {
+      const { g } = play();
+      drop(g, 25, 480);
+      g.input.left = false;
+      let top = 1;
+      for (let i = 0; i < 3000; i++) {
+        if (i === press) g.input.left = true;
+        if (i === press + 120) g.input.left = false;
+        tick(g);
+        const b = g.table.world.balls[0];
+        if (b && i > press) top = Math.min(top, b.y);
+      }
+      best = Math.min(best, top);
+    }
+    expect(best).toBeLessThan(0.3); // up into the dome
+  });
+
+  it("swings the upper flipper with the left button only", () => {
+    const { g } = play();
+    const u = () => g.table.world.flippers[g.table.flipperIds.indexOf("upperLeft")]!.u;
+    g.input.right = true;
+    for (let i = 0; i < 100; i++) tick(g);
+    expect(u()).toBe(0);
+    g.input.right = false;
+    g.input.left = true;
+    for (let i = 0; i < 100; i++) tick(g);
+    expect(u()).toBe(1);
+  });
+
+  it("keeps the upper flipper off a wedge at the left wall: the ball that touches the wall lies at or right of the pivot, so it rolls onto the flipper, and no ball fits between pivot and wall", () => {
+    const f = colonyTable.flippers.find((x) => x.id === "upperLeft")!;
+    const wallX = 5;
+    const r = colonyTable.ball.radius;
+    expect(f.pivot[0] - f.rBase).toBeGreaterThanOrEqual(wallX); // not through the wall
+    expect(f.pivot[0] - f.rBase - wallX).toBeLessThan(2 * r); // no gap a ball slips through
+    expect(f.pivot[0]).toBeLessThanOrEqual(wallX + r); // the ball against the wall is right of the pivot centre: it does not wedge
   });
 });

@@ -35,7 +35,7 @@ describe("the scoring scale of The Colony (#46)", () => {
       expect(p, sw).toBeGreaterThan(0);
       expect(p, sw).toBeLessThan(SKILL_SHOT / 10);
     }
-    expect(Object.keys(SWITCH_POINTS).every((sw) => colonyTable.walls.some((w) => w.switch === sw) || (colonyTable.triggers ?? []).some((t) => t.switch === sw))).toBe(true);
+    expect(Object.keys(SWITCH_POINTS).every((sw) => colonyTable.walls.some((w) => w.switch === sw) || colonyTable.posts.some((p) => p.switch === sw) || (colonyTable.triggers ?? []).some((t) => t.switch === sw))).toBe(true);
     expect(REPLAY_SCORE).toBeLessThan(MAX_SCORE);
     expect(groups(REPLAY_SCORE)).toBe("1,000,000,000");
     expect(groups(REPLAY_SCORE).length).toBeLessThanOrEqual(13);

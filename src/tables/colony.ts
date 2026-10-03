@@ -35,14 +35,25 @@ export const colonyTable: TableDef = {
     // the right lanes, the mirror of the left ones about the middle of the playfield between the walls (x = 244)
     { type: "polyline", points: [[428, 770], [428, 838], [349.25, 891.8]], material: "metal" },
     { type: "segment", a: [378, 730], b: [358, 830], material: "rubber", switch: "slingR" },
+    // the Scout: a standup target on the right, slanted so no ball can rest on it
+    { type: "segment", a: [395, 545], b: [440, 565], material: "rubber", switch: "scout" },
   ],
-  posts: [],
+  posts: [
+    // the Aphid Pasture: three pop bumpers in a triangle, 60 mm or more between their edges (no pocket for a ball to bounce in for ever)
+    { at: [260, 320], r: 18, material: "rubber", switch: "bumper1", kick: { speed: 2, minHit: 0.3, cooldownMs: 30 } },
+    { at: [200, 395], r: 18, material: "rubber", switch: "bumper2", kick: { speed: 2, minHit: 0.3, cooldownMs: 30 } },
+    { at: [320, 395], r: 18, material: "rubber", switch: "bumper3", kick: { speed: 2, minHit: 0.3, cooldownMs: 30 } },
+  ],
   triggers: [
     { id: "outL", at: [32, 960], r: 12, switch: "outL" },
     { id: "kickbackL", at: [32, 1005], r: 10, switch: "kickbackL" },
     { id: "inL", at: [85, 810], r: 10, switch: "inL" },
     { id: "inR", at: [403, 810], r: 10, switch: "inR" },
     { id: "outR", at: [455, 960], r: 12, switch: "outR" },
+    // the three rollover lanes at the top ("W-O-R"), under the dome
+    { id: "rollW", at: [190, 120], r: 10, switch: "rollW" },
+    { id: "rollO", at: [260, 110], r: 10, switch: "rollO" },
+    { id: "rollR", at: [330, 120], r: 10, switch: "rollR" },
     // the skill shot: three rollovers up the plunger lane, the harder the pull the further the ball gets
     { id: "skill1", at: [499, 700], r: 10, switch: "skill1" },
     { id: "skill2", at: [499, 500], r: 10, switch: "skill2" },
@@ -52,7 +63,9 @@ export const colonyTable: TableDef = {
   flippers: [
     { id: "left", pivot: [134, 900], length: 58, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber" },
     { id: "right", pivot: [354, 900], length: 58, rBase: 9.5, rTip: 5, restDeg: 150, activeDeg: 210, upMs: 40, downMs: 100, material: "rubber" },
+    // the upper flipper, on the left wall; it follows the left button
+    { id: "upperLeft", pivot: [16, 600], length: 58, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber", input: "left" },
   ],
-  sounds: { slingL: "sling", slingR: "sling" },
-  shots: { skillShot: ["skill1", "skill2", "skill3"] },
+  sounds: { slingL: "sling", slingR: "sling", scout: "target" },
+  shots: { skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"] },
 };

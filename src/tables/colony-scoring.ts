@@ -15,6 +15,13 @@ export const SWITCH_POINTS: Record<string, number> = {
   inR: 25_000,
   outL: 5_000,
   outR: 5_000,
+  bumper1: 5_000,
+  bumper2: 5_000,
+  bumper3: 5_000,
+  scout: 50_000,
+  rollW: 10_000,
+  rollO: 10_000,
+  rollR: 10_000,
 };
 
 /** Biggest score a table may use: JS numbers are exact up to 2^53, the HUD groups the digits. */
