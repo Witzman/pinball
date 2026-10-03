@@ -128,10 +128,11 @@ export function setMagnet(g: Game, id: string, on: boolean): void {
 
 /**
  * Asks for a nudge: it is applied at the start of the next tick, to every free ball.
- * Dropped (false) while another is waiting or the last one was less than the cooldown ago.
+ * Dropped (false) while another is waiting, the last one was less than the cooldown ago,
+ * or the game is paused or broken (a nudge made then would fire on the first tick after).
  */
 export function nudge(g: Game, dir: NudgeDir): boolean {
-  if (g.pendingNudge !== null || g.table.world.tick - g.lastNudge < NUDGE_COOLDOWN) return false;
+  if (g.paused || g.broken !== null || g.pendingNudge !== null || g.table.world.tick - g.lastNudge < NUDGE_COOLDOWN) return false;
   g.pendingNudge = dir;
   return true;
 }

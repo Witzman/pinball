@@ -240,6 +240,28 @@ describe("swipes", () => {
     expect(swipe([200, 98], [50, 98])).toBe("left"); // just inside it
   });
 
+  it("presses no button with a finger that began in the free band, wherever its swipe ends", () => {
+    const up = new TouchTracker(W, H);
+    up.down(1, 300, 110, 0); // just inside the free band (y 96 and more)
+    up.move(1, 300, 60, 50); // swiped up into the machine band: start
+    expect(up.state()).toEqual(fresh());
+    const toFlipper = new TouchTracker(W, H);
+    toFlipper.down(1, 100, 390, 0);
+    toFlipper.move(1, 100, 500, 50); // swiped down into the flipper half
+    expect(toFlipper.state()).toEqual(fresh());
+    const still = new TouchTracker(W, H);
+    still.down(1, 300, 200, 0);
+    expect(still.state()).toEqual(fresh());
+  });
+
+  it("still lets a second finger from the lower half hold its flipper while one swipes", () => {
+    const t = new TouchTracker(W, H);
+    t.down(1, 300, 200, 0);
+    t.down(2, 50, 700, 0);
+    t.move(1, 200, 200, 50);
+    expect(t.state()).toEqual({ ...fresh(), left: true });
+  });
+
   it("does not let a finger that drifts up from a flipper make a nudge", () => {
     const t = new TouchTracker(W, H);
     t.down(1, 100, 700, 0);

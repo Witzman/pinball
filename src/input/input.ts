@@ -59,6 +59,8 @@ interface Start {
   t: number;
   /** Began in the free band, so it may swipe; and not yet used up. */
   live: boolean;
+  /** Began in the free band: a finger of the swipe, which presses no button wherever it ends up. */
+  free: boolean;
 }
 
 /**
@@ -82,7 +84,8 @@ export class TouchTracker {
   }
   down(id: number, x: number, y: number, t = 0): void {
     this.pointers.set(id, [x, y]);
-    this.starts.set(id, { x, y, t, live: touchZone(x, y, this.w, this.h) === null });
+    const free = touchZone(x, y, this.w, this.h) === null;
+    this.starts.set(id, { x, y, t, live: free, free });
   }
   /** Moves a finger; returns a nudge direction once, when the finger has made a swipe. */
   move(id: number, x: number, y: number, t = 0): NudgeDir | null {
@@ -119,7 +122,9 @@ export class TouchTracker {
   }
   state(): GameInput {
     const s: GameInput = { left: false, right: false, plunge: false, coin: false, start: false, buyin: false };
-    for (const [x, y] of this.pointers.values()) {
+    for (const [id, [x, y]] of this.pointers) {
+      // a swipe that ends in the machine band or the flipper half must not press coin, start or a flipper
+      if (this.starts.get(id)?.free) continue;
       const z = touchZone(x, y, this.w, this.h);
       if (z) s[z] = true;
     }

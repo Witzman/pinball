@@ -90,6 +90,7 @@ async function boot(): Promise<void> {
   function releaseAll(): void {
     for (const b of ["left", "right", "plunge", "coin", "start", "buyin"] as const) keys[b] = false;
     touch.clear();
+    game.pendingNudge = null; // nor may a shove asked for just before fire when play resumes
     latch.clear(); // a press made just before the tab was hidden must not fire when it comes back
     give(latch.update({ left: false, right: false, plunge: false, coin: false, start: false, buyin: false }));
   }

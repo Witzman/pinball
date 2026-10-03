@@ -86,6 +86,17 @@ describe("nudging the game", () => {
     expect(g.events.some((e) => e.t === "nudge")).toBe(false);
   });
 
+  it("refuses a nudge while paused or broken, so nothing fires when play resumes", () => {
+    const { g, b } = steady();
+    g.paused = true;
+    expect(nudge(g, "left")).toBe(false);
+    g.paused = false;
+    advance(g, 5);
+    expect(b.vx).toBe(0);
+    g.broken = "boom";
+    expect(nudge(g, "left")).toBe(false);
+  });
+
   it("works through advance, as the live loop calls it", () => {
     const { g, b } = steady();
     nudge(g, "left");

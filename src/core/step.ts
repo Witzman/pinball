@@ -192,7 +192,8 @@ function enterTriggers(w: World, b: Ball, bi: number, x0: number, y0: number): v
 /**
  * A nudge: every free ball (not held in a sinkhole) gets the velocity change (dvx, dvy).
  * Called between steps like `kickHeld`, never inside one. Returns how many balls it
- * kicked. Only + and *, so replays stay exact.
+ * kicked. Only + and *, so replays stay exact. Callers pass finite numbers: a NaN would
+ * poison the ball and every hash after it.
  */
 export function nudge(w: World, dvx: number, dvy: number): number {
   let n = 0;
