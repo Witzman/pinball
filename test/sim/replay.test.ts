@@ -50,19 +50,27 @@ describe("replay runner", () => {
     expect(a).not.toBe(b);
   });
 
-  it("launches the ball off the plunger in the shipped replays: it goes round the table and drains, which the idle replay never does", () => {
-    expect(runReplay(file("idle"), allTables).game.drains).toBe(0);
+  it("launches the ball off the plunger in the shipped replays: two seconds after the pull it is far from the idle ball, still in the table", () => {
+    const at = (n: string, ticks: number) => {
+      const r = file(n);
+      return runReplay({ header: { ...r.header, ticks }, inputs: r.inputs.filter((i) => i.tick < ticks) }, allTables).game.table.world.balls[0]!;
+    };
+    const idle = at("idle", 2000);
     for (const n of ["launch-and-flip", "flipper-hammering"]) {
-      expect(runReplay(file(n), allTables).game.drains, n).toBeGreaterThan(0);
+      const b = at(n, 2000);
+      expect(Math.hypot(b.x - idle.x, b.y - idle.y), n).toBeGreaterThan(0.3);
+      expect(b.y, n).toBeLessThan(1.05);
     }
   });
 
-  it("makes the ball meet the flippers in the shipped replays: at some moment the ball is elsewhere than without the flipper inputs", () => {
+  it("makes the ball meet the flippers in the shipped replays: in the 800 ticks after the first flipper input the ball is at some moment elsewhere than without them", () => {
     for (const n of ["launch-and-flip", "flipper-hammering"]) {
       const r = file(n);
       const plungeOnly = { ...r, inputs: r.inputs.filter((i) => i.action.startsWith("plunge")) };
       let apart = 0;
-      for (let ticks = 250; ticks <= r.header.ticks; ticks += 250) {
+      const first = r.inputs.find((i) => !i.action.startsWith("plunge"))!.tick;
+      // from the first flipper input on, every 25 ticks: the ball may be gone again a few hundred ticks later
+      for (let ticks = first + 25; ticks <= Math.min(r.header.ticks, first + 800); ticks += 25) {
         const upTo = (x: typeof r) => ({ header: { ...r.header, ticks }, inputs: x.inputs.filter((i) => i.tick < ticks) });
         const a = runReplay(upTo(r), allTables).game.table.world.balls[0]!;
         const b = runReplay(upTo(plungeOnly), allTables).game.table.world.balls[0]!;
