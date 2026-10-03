@@ -16,6 +16,14 @@ describe("lamps", () => {
     expect(h.state.lamps.brood).toBe("collected");
   });
 
+  it("sends a command only when lit or not lit changes: collected and off look the same to the leaves", () => {
+    const steps = ["lit", "collected", "off", "collected", "lit", "off", "off", "lit"] as const;
+    const h = harness({ modes: {}, onSwitch: (c, e) => c.setLamp("l", steps[Number(e.sw)]!) });
+    for (let i = 0; i < steps.length; i++) h.at(i + 1).hit(String(i));
+    h.run(20);
+    expect(h.cmds.map((c) => (c as { state: string }).state)).toEqual(["lit", "off", "lit", "off", "lit"]);
+  });
+
   it("reads off for a lamp never set", () => {
     let seen = "";
     const h = harness({ modes: {}, onSwitch: (c) => { seen = c.lamp("nothing"); } });
@@ -221,16 +229,42 @@ describe("shots", () => {
     const order: string[] = [];
     const table: TableRules = {
       modes: { m: { start: "p", phases: { p: { on: { switch: () => order.push("mode switch"), shot: () => order.push("mode shot") } } } } },
-      onSwitch: () => order.push("table switch"),
+      onSwitch: (c, e) => {
+        if (e.sw === "go") c.start("m");
+        else order.push("table switch");
+      },
       onShot: () => order.push("table shot"),
-      onBallStart: undefined,
     };
     const h = harness(table, { shots });
-    h.rules.step(0, [], []);
-    (table.modes.m!.phases.p!.enter = undefined);
-    h.state.modes.m = { phase: "p", since: 0, data: {} };
-    h.at(5).hit("t1").run(6);
+    h.at(1).hit("go").at(5).hit("t1").run(6);
     expect(order).toEqual(["mode switch", "table switch", "mode shot", "table shot"]);
+  });
+
+  it("completes a shot whose sequence repeats its own start: A, A, A, B finishes [A, A, B]", () => {
+    const fire = (list: string[], hits: string[]) => {
+      const seen: string[] = [];
+      const h = harness({ modes: {}, onShot: (_c, s) => seen.push(s) }, { shots: { s: list } });
+      hits.forEach((sw, i) => h.at(i + 1).hit(sw));
+      h.run(hits.length + 2);
+      return seen;
+    };
+    expect(fire(["A", "A", "B"], ["A", "A", "A", "B"])).toEqual(["s"]);
+    expect(fire(["A", "B", "A", "C"], ["A", "B", "A", "B", "A", "C"])).toEqual(["s"]);
+    expect(fire(["A", "A", "B"], ["A", "B"])).toEqual([]);
+    expect(fire(["A", "B", "A", "C"], ["A", "B", "A", "A", "C"])).toEqual([]);
+    expect(fire(["A", "B", "C"], ["A", "C", "B", "C"])).toEqual([]);
+  });
+
+  it("ignores a switch that is not in the shot, but drops the progress on one that is in it out of order", () => {
+    const seen: string[] = [];
+    const h = harness({ modes: {}, onShot: (_c, s) => seen.push(s) }, { shots: { s: ["A", "B", "C"] } });
+    h.at(1).hit("A").at(2).hit("zzz").at(3).hit("B").run(4);
+    expect(h.state.shots).toEqual({ s: { i: 2, at: 1 } });
+    h.at(5).hit("A").run(6); // A is in the list but not next: it can only start over
+    expect(h.state.shots).toEqual({ s: { i: 1, at: 5 } });
+    h.at(7).hit("C").run(8); // C is in the list, no start of the sequence ends with it
+    expect(h.state.shots).toEqual({});
+    expect(seen).toEqual([]);
   });
 
   it("refuses a shot with no switches", () => {
@@ -326,6 +360,39 @@ describe("modes", () => {
     expect(seen).toEqual(["a", "a", "z"]);
   });
 
+  it("survives an exit handler that stops, starts or goes to its own mode", () => {
+    const stopSelf: TableRules["modes"] = { m: { start: "p", phases: { p: { exit: (c) => { c.stop("m"); c.start("m"); } }, q: {} } } };
+    const h = harness({ modes: stopSelf, onSwitch: (c, e) => (e.sw === "go" ? c.start("m") : c.stop("m")) });
+    h.at(1).hit("go").at(2).hit("stop").run(3);
+    expect(h.state.modes).toEqual({});
+    const gotoSelf: TableRules["modes"] = { m: { start: "p", phases: { p: { exit: (c) => c.goto("m", "q") }, q: {} } } };
+    const g = harness({ modes: gotoSelf, onSwitch: (c, e) => (e.sw === "go" ? c.start("m") : c.goto("m", "q")) });
+    expect(() => g.at(1).hit("go").at(2).hit("move").run(3)).toThrow(/already leaving/);
+  });
+
+  it("removes a mode whose exit handler threw instead of leaving it half stopped", () => {
+    const boom: TableRules["modes"] = { m: { start: "p", phases: { p: { exit: () => { throw new Error("boom"); } } } } };
+    const rules = createRules({ modes: boom, onSwitch: (c, e) => (e.sw === "go" ? c.start("m") : c.stop("m")) }, { seed: 1 });
+    const sw = (tick: number, name: string): RulesEvent => ({ t: "switch", tick, ball: 0, sw: name, kind: "hit", impulse: 1 });
+    rules.step(1, [sw(1, "go")], []);
+    expect(() => rules.step(2, [sw(2, "stop")], [])).toThrow(/boom/);
+    expect(rules.state.modes).toEqual({});
+  });
+
+  it("gives an event to the modes running when it began, whichever sorts first", () => {
+    const seen: string[] = [];
+    const mk = (name: string, starts?: string): TableRules["modes"][string] => ({
+      start: "p",
+      phases: { p: { on: { switch: (c) => { seen.push(name); if (starts) c.start(starts); } } } },
+    });
+    // "a" starts "b" (sorts after) and "c" starts "0" (sorts before); neither newcomer sees the event that started it
+    const table: TableRules["modes"] = { a: mk("a", "b"), b: mk("b"), c: mk("c", "0"), 0: mk("0") };
+    const h = harness({ modes: table, onSwitch: (c, e) => { if (e.sw === "go") { c.start("a"); c.start("c"); } } });
+    h.at(1).hit("go").at(2).hit("x").at(3).hit("y").run(4);
+    // tick 2: only a and c, the modes running when it began; tick 3: all four, in id order
+    expect(seen).toEqual(["a", "c", "0", "a", "b", "c"]);
+  });
+
   it("throws on unknown modes and phases, goto on a mode that is not running, and runaway nesting", () => {
     const go = (fn: (c: Ctx) => void, modes: TableRules["modes"] = {}) => () => harness({ modes, onSwitch: (c) => fn(c) }).at(1).hit("x").run(1);
     expect(go((c) => c.start("nope"))).toThrow(/unknown mode "nope"/);
@@ -368,20 +435,79 @@ describe("randomness, emit and drains", () => {
     expect(h.cmds).toEqual(cmds);
   });
 
-  it("calls onDrain and gives button and drain events to the modes", () => {
+  it("calls onDrain and gives button, drain and plunger events to the modes", () => {
     const seen: string[] = [];
     const table: TableRules = {
       modes: { m: { start: "p", phases: { p: { on: { button: (_c, e) => seen.push(`button ${e.t === "button" ? e.button : ""}`), drain: () => seen.push("mode drain"), ballAtPlunger: () => seen.push("plunger") } } } } },
+      onSwitch: (c) => c.start("m"),
       onDrain: () => seen.push("table drain"),
     };
     const h = harness(table);
-    h.state.modes.m = { phase: "p", since: 0, data: {} };
-    h.at(1).button("left", true).at(2).drain().at(3).ballAtPlunger().run(4);
+    h.at(1).hit("go").at(2).button("left", true).at(3).drain().at(4).ballAtPlunger().run(5);
     expect(seen).toEqual(["button left", "mode drain", "table drain", "plunger"]);
   });
 
   it("leaves the ball manager calls for the wiring step", () => {
     expect(() => harness({ modes: {}, onSwitch: (c) => c.ball.feed() }).at(1).hit("a").run(1)).toThrow(/ball manager/);
+  });
+});
+
+describe("what the engine insists on", () => {
+  it("refuses a tick that is not a whole number or goes backwards, and accepts the same tick again", () => {
+    const rules = createRules(empty, { seed: 1 });
+    rules.step(10, [], []);
+    rules.step(10, [], []);
+    expect(() => rules.step(9, [], [])).toThrow(/not before tick 10/);
+    expect(() => rules.step(Number.NaN, [], [])).toThrow(/whole number/);
+    expect(() => rules.step(11.5, [], [])).toThrow(/whole number/);
+    expect(rules.state.tick).toBe(10);
+  });
+
+  it("keeps its own copy of a saved state", () => {
+    const h = harness({ modes: {}, onSwitch: (c) => c.add("n") });
+    h.at(1).hit("a").run(2);
+    const saved = restore(serialize(h.state));
+    const rules = createRules({ modes: {}, onSwitch: (c) => c.add("n") }, { seed: 1, state: saved });
+    rules.step(3, [{ t: "switch", tick: 3, ball: 0, sw: "a", kind: "hit", impulse: 1 }], []);
+    expect(saved.counters.n).toBe(1);
+    expect(rules.state.counters.n).toBe(2);
+  });
+
+  it("does not mistake names like constructor or toString for entries, and refuses __proto__ as an id", () => {
+    let lamp = "";
+    let count = -1;
+    let mode: unknown = "unset";
+    const h = harness({
+      modes: { m: { start: "p", phases: { p: {} } } },
+      onSwitch(c) {
+        lamp = c.lamp("constructor");
+        count = c.count("toString");
+        mode = c.mode("hasOwnProperty");
+      },
+    });
+    h.at(1).hit("a").run(2);
+    expect([lamp, count, mode]).toEqual(["off", 0, null]);
+    for (const bad of ["__proto__", ""]) {
+      expect(() => harness({ modes: {}, onSwitch: (c) => c.add(bad) }).at(1).hit("a").run(1)).toThrow(/not a usable id/);
+      expect(() => harness({ modes: {}, onSwitch: (c) => c.setLamp(bad, "lit") }).at(1).hit("a").run(1)).toThrow(/not a usable id/);
+      expect(() => harness({ modes: {}, onSwitch: (c) => c.after(bad, 5) }).at(1).hit("a").run(1)).toThrow(/not a usable id/);
+    }
+    expect(() => harness({ modes: {}, onSwitch: (c) => c.start("toString") }).at(1).hit("a").run(1)).toThrow(/unknown mode "toString"/);
+  });
+
+  it("replays a missed every-timer one beat per step, not all at once", () => {
+    const fired: number[] = [];
+    const rules = createRules({ modes: {}, onSwitch: (c) => c.every("e", 10), onTimer: (c) => fired.push(c.now) }, { seed: 1 });
+    rules.step(0, [{ t: "switch", tick: 0, ball: 0, sw: "go", kind: "hit", impulse: 1 }], []);
+    for (const t of [95, 96, 97]) rules.step(t, [], []);
+    expect(fired).toEqual([95, 96, 97]);
+    expect(rules.state.timers.e!.due).toBe(40);
+  });
+
+  it("refuses a save with progress on a shot the table does not have", () => {
+    const h = harness(empty, { shots: { s: ["a", "b"] } });
+    h.at(1).hit("a").run(2);
+    expect(() => createRules(empty, { seed: 1, shots: { other: ["a", "b"] }, state: restore(serialize(h.state)) })).toThrow(/shot "s" which the table does not define/);
   });
 });
 
