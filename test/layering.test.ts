@@ -8,8 +8,9 @@ import { fileURLToPath } from "node:url";
 const ALLOWED: Record<string, string[]> = {
   core: ["core"],
   table: ["core", "table"],
-  tables: ["table", "tables"],
-  sim: ["core", "table", "sim"],
+  rules: ["table", "rules"],
+  tables: ["table", "rules", "tables"],
+  sim: ["core", "table", "rules", "sim"],
   input: ["input", "sim"],
   render: ["core", "table", "sim", "render"],
 };
@@ -39,7 +40,7 @@ describe("layering", () => {
         }
       });
 
-      if (["table", "tables", "sim", "input", "render"].includes(layer)) {
+      if (["table", "rules", "tables", "sim", "input", "render"].includes(layer)) {
         it(`${rel} touches no DOM, clock or randomness`, () => {
           if (layer !== "render") expect(code).not.toMatch(/\b(document|window|navigator|performance)\b/);
           expect(code).not.toMatch(/Date\.now|Math\.random/);
