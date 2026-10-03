@@ -58,7 +58,7 @@ export interface StaticScene {
   length: number;
   walls: { ax: number; ay: number; bx: number; by: number; kind: "wall" | "rubber" | "switch"; zoneMask: number }[];
   posts: { x: number; y: number; r: number; kind: "post" | "switch"; zoneMask: number }[];
-  triggers: { x: number; y: number; r: number; hold: boolean }[];
+  triggers: { id: string; x: number; y: number; r: number; hold: boolean }[];
   /** Height of each zone's level above the playfield, metres. */
   heights: number[];
   ramps: { zone: number; path: { x: number; y: number }[]; width: number }[];
@@ -72,7 +72,7 @@ export function buildScene(table: LoadedTable): StaticScene {
     length: table.playfieldLength,
     walls: w.segments.map((s) => ({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, kind: s.sw > 0 ? "switch" : s.e > 0.5 ? "rubber" : "wall", zoneMask: s.zoneMask })),
     posts: w.circles.map((c) => ({ x: c.x, y: c.y, r: c.r, kind: c.sw > 0 ? "switch" : "post", zoneMask: c.zoneMask })),
-    triggers: w.triggers.map((t) => ({ x: t.x, y: t.y, r: t.r, hold: t.hold })),
+    triggers: w.triggers.map((t, i) => ({ id: table.triggerIds[i]!, x: t.x, y: t.y, r: t.r, hold: t.hold })),
     heights: [...table.heights],
     ramps: table.ramps.map((r) => ({ zone: r.zone, width: r.width, path: r.path.map((q) => ({ ...q })) })),
   };

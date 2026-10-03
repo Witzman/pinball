@@ -2,7 +2,7 @@ import * as pc from "playcanvas";
 import type { FlipperView, Snapshot, StaticScene } from "../../sim/snapshot";
 import { drawHud } from "../hud";
 import type { Renderer } from "../renderer";
-import { playfieldTexture, studioSky } from "./art";
+import { backglassTexture, drawDisplay, glowTexture, playfieldTexture, studioSky } from "./art";
 import { fitDistance } from "./frame";
 
 // The PlayCanvas renderer (issue #45): the same Renderer interface as the canvas placeholder,
@@ -66,7 +66,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     const sky = texture(app.graphicsDevice, studioSky(), false);
     sky.projection = pc.TEXTUREPROJECTION_EQUIRECT;
     app.scene.envAtlas = pc.EnvLighting.generateAtlas(sky);
-    app.scene.skyboxIntensity = 1;
+    app.scene.skyboxIntensity = 1.6;
   } catch (e) {
     console.warn("playcanvas: no reflections", e);
   }
@@ -77,8 +77,18 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
   root.addChild(dyn);
 
   const camera = new pc.Entity("camera");
-  camera.addComponent("camera", { fov: 50, nearClip: 5, farClip: 600, clearColor: new pc.Color(0.03, 0.035, 0.05) });
+  camera.addComponent("camera", { fov: 50, nearClip: 5, farClip: 600, clearColor: new pc.Color(0, 0, 0) });
   app.root.addChild(camera);
+  try {
+    const frame = new pc.CameraFrame(app, camera.camera!);
+    frame.rendering.toneMapping = pc.TONEMAP_ACES;
+    frame.rendering.samples = 4;
+    frame.bloom.intensity = 0.03;
+    frame.bloom.blurLevel = 6;
+    frame.update();
+  } catch (e) {
+    console.warn("playcanvas: no post effects", e);
+  }
   camera.camera!.layers = camera.camera!.layers.filter((l) => l !== pc.LAYERID_SKYBOX); // the sky lights the metal, it is not drawn behind the table
 
   const key = new pc.Entity("key");
@@ -91,21 +101,36 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
   app.root.addChild(fill);
 
   const mats = {
-    chrome: material({ diffuse: [0.8, 0.82, 0.88], metal: 1, gloss: 0.88 }),
-    rubber: material({ diffuse: [0.08, 0.3, 0.85], metal: 0, gloss: 0.45 }),
-    amber: material({ diffuse: [0.9, 0.55, 0.12], emissive: [1, 0.55, 0.1], emissiveIntensity: 0.6, metal: 0.2, gloss: 0.7 }),
-    post: material({ diffuse: [0.75, 0.78, 0.85], metal: 1, gloss: 0.8 }),
-    bumperBody: material({ diffuse: [0.55, 0.08, 0.06], metal: 0.1, gloss: 0.7 }),
-    bumperCap: material({ diffuse: [1, 0.75, 0.3], emissive: [1, 0.6, 0.15], emissiveIntensity: 1.1, metal: 0, gloss: 0.9 }),
-    flipper: material({ diffuse: [0.95, 0.93, 0.88], metal: 0.15, gloss: 0.8 }),
-    flipperRubber: material({ diffuse: [0.9, 0.12, 0.1], metal: 0, gloss: 0.5 }),
-    ball: material({ diffuse: [0.92, 0.94, 1], metal: 1, gloss: 0.97 }),
-    insert: material({ diffuse: [0.1, 0.1, 0.1], emissive: [1, 0.8, 0.2], emissiveIntensity: 0.9, metal: 0, gloss: 0.9 }),
+    chrome: material({ diffuse: [0.92, 0.94, 1], metal: 1, gloss: 0.96 }),
+    steel: material({ diffuse: [0.16, 0.17, 0.22], metal: 0.7, gloss: 0.6 }),
+    rubber: material({ diffuse: [0.1, 0.35, 0.95], emissive: [0.05, 0.2, 0.7], emissiveIntensity: 0.35, metal: 0, gloss: 0.5 }),
+    amber: material({ diffuse: [0.95, 0.6, 0.15], emissive: [1, 0.55, 0.1], emissiveIntensity: 0.7, metal: 0.2, gloss: 0.7 }),
+    bumperBody: material({ diffuse: [0.6, 0.07, 0.05], metal: 0.15, gloss: 0.75 }),
+    bumperCap: material({ diffuse: [1, 0.8, 0.35], emissive: [1, 0.65, 0.2], emissiveIntensity: 1.4, metal: 0, gloss: 0.95 }),
+    flipper: material({ diffuse: [0.97, 0.95, 0.9], metal: 0.2, gloss: 0.85 }),
+    flipperRubber: material({ diffuse: [0.85, 0.08, 0.06], metal: 0, gloss: 0.55 }),
+    ball: material({ diffuse: [0.95, 0.96, 1], metal: 1, gloss: 0.98 }),
     hole: material({ diffuse: [0.02, 0.02, 0.02], metal: 0, gloss: 0.2 }),
     plastic: material({ diffuse: [0.6, 0.8, 1], opacity: 0.3, metal: 0, gloss: 0.95 }),
   };
+  const glowTex = texture(app.graphicsDevice, glowTexture(), false);
+  /** An additive glow: light on the playfield that does not hide what is under it. */
+  const glowMaterial = (rgb: [number, number, number], intensity: number): pc.StandardMaterial => {
+    const m = new pc.StandardMaterial();
+    m.diffuse = color(0, 0, 0);
+    m.emissive = color(...rgb);
+    m.emissiveIntensity = intensity;
+    m.emissiveMap = glowTex;
+    m.opacityMap = glowTex;
+    m.opacityMapChannel = "r";
+    m.blendType = pc.BLEND_ADDITIVE;
+    m.depthWrite = false;
+    m.useLighting = false;
+    m.update();
+    return m;
+  };
 
-  const add = (parent: pc.Entity, type: "box" | "cylinder" | "sphere", mat: pc.Material, shadows = true): pc.Entity => {
+  const add = (parent: pc.Entity, type: "box" | "cylinder" | "sphere" | "plane", mat: pc.Material, shadows = true): pc.Entity => {
     const e = new pc.Entity();
     e.addComponent("render", { type, material: mat, castShadows: shadows, receiveShadows: true });
     parent.addChild(e);
@@ -122,6 +147,13 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
   const X = (x: number) => (x - sceneW / 2) * S;
   const Z = (y: number) => (y - sceneL / 2) * S;
 
+  interface Insert { disc: pc.Entity; glow: pc.Entity; rgb: [number, number, number]; level: number; discMat: pc.StandardMaterial; glowMat: pc.StandardMaterial }
+  const inserts = new Map<string, Insert>();
+  const insertMaterial = (rgb: [number, number, number], level: number): pc.StandardMaterial => material({ diffuse: [rgb[0] * 0.15, rgb[1] * 0.15, rgb[2] * 0.15], emissive: rgb, emissiveIntensity: level * 1.6, metal: 0, gloss: 0.9 });
+  /** What colour an insert is, by the name of its lamp: the lanes of the skill shot green, rollovers yellow, lanes orange, the kickback red. */
+  const insertColor = (id: string): [number, number, number] => (id.startsWith("skill") ? [0.2, 1, 0.35] : id.startsWith("roll") ? [1, 0.9, 0.2] : id.startsWith("kick") ? [1, 0.2, 0.15] : [1, 0.55, 0.12]);
+  const LAMP_LEVEL = { off: 0.25, lit: 1.2, flash: 1.2, collected: 0.5 } as const;
+
   let flipperEntities: pc.Entity[][] = [];
   const balls: pc.Entity[] = [];
   let built: pc.Entity | null = null;
@@ -133,14 +165,15 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
       built.destroy();
       built = null;
     }
+    inserts.clear();
     const g = new pc.Entity("static");
     root.addChild(g);
     built = g;
     // the playfield
-    const tex = texture(app.graphicsDevice, playfieldTexture(1024, 2048, sceneW, sceneL));
+    const tex = texture(app.graphicsDevice, playfieldTexture(1536, 3072, sceneW, sceneL));
     const field = add(g, "box", material({ diffuse: [1, 1, 1], map: tex, metal: 0, gloss: 0.55 }));
     place(field, 0, -0.5, 0, sceneW * S, 1, sceneL * S);
-    // rails
+    // rails: a steel wall under a chrome tube
     const joints = new Set<string>();
     for (const wl of scene.walls) {
       const ax = X(wl.ax);
@@ -149,17 +182,27 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
       const bz = Z(wl.by);
       const len = Math.hypot(bx - ax, bz - az);
       if (len < 0.01) continue;
-      const mat = wl.kind === "rubber" ? mats.rubber : wl.kind === "switch" ? mats.amber : mats.chrome;
-      const e = add(g, "box", mat);
-      place(e, (ax + bx) / 2, RAIL_H / 2, (az + bz) / 2, len + (wl.kind === "wall" ? RAIL_T * 0.2 : 0), RAIL_H, RAIL_T, (-Math.atan2(bz - az, bx - ax) * 180) / Math.PI);
+      const yaw = (-Math.atan2(bz - az, bx - ax) * 180) / Math.PI;
       if (wl.kind === "wall") {
+        const wall = add(g, "box", mats.steel);
+        place(wall, (ax + bx) / 2, RAIL_H / 2, (az + bz) / 2, len, RAIL_H, RAIL_T * 0.7, yaw);
+        const pivot = new pc.Entity();
+        pivot.setLocalPosition((ax + bx) / 2, RAIL_H + 0.1, (az + bz) / 2);
+        pivot.setLocalEulerAngles(0, yaw, 0);
+        g.addChild(pivot);
+        const tube = add(pivot, "cylinder", mats.chrome);
+        tube.setLocalEulerAngles(0, 0, 90);
+        tube.setLocalScale(RAIL_T * 1.2, len + 0.05, RAIL_T * 1.2);
         for (const [x, z] of [[ax, az], [bx, bz]] as const) {
           const k = `${x.toFixed(2)},${z.toFixed(2)}`;
           if (joints.has(k)) continue;
           joints.add(k);
-          const cap = add(g, "cylinder", mats.chrome);
-          place(cap, x, RAIL_H / 2, z, RAIL_T, RAIL_H, RAIL_T);
+          const cap = add(g, "sphere", mats.chrome);
+          place(cap, x, RAIL_H + 0.1, z, RAIL_T * 1.2, RAIL_T * 1.2, RAIL_T * 1.2);
         }
+      } else {
+        const e = add(g, "box", wl.kind === "rubber" ? mats.rubber : mats.amber);
+        place(e, (ax + bx) / 2, RAIL_H * 0.45, (az + bz) / 2, len, RAIL_H * 0.9, RAIL_T * 1.1, yaw);
       }
     }
     // posts and bumpers
@@ -169,21 +212,33 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
       const r = p.r * S;
       if (p.kind === "switch") {
         const body = add(g, "cylinder", mats.bumperBody);
-        place(body, x, 1.3, z, r * 2, 2.6, r * 2);
-        const cap = add(g, "cylinder", mats.bumperCap);
-        place(cap, x, 2.75, z, r * 1.5, 0.35, r * 1.5);
+        place(body, x, 1.2, z, r * 2, 2.4, r * 2);
         const ring = add(g, "cylinder", mats.chrome);
-        place(ring, x, 2.4, z, r * 2.15, 0.25, r * 2.15);
+        place(ring, x, 2.45, z, r * 2.2, 0.35, r * 2.2);
+        const dome = add(g, "sphere", mats.bumperCap, false);
+        place(dome, x, 2.6, z, r * 1.6, r * 0.9, r * 1.6);
+        const glow = add(g, "plane", glowMaterial([1, 0.6, 0.15], 0.45), false);
+        place(glow, x, 0.06, z, r * 4.2, 1, r * 4.2);
       } else {
-        const e = add(g, "cylinder", mats.post);
+        const e = add(g, "cylinder", mats.chrome);
         place(e, x, 1.6, z, r * 2, 3.2, r * 2);
       }
     }
-    // inserts: the lit discs of the rollovers; a dark hole for a sinkhole
+    // inserts: the lit discs of the lanes and rollovers, with a glow; a dark hole for a sinkhole
     for (const t of scene.triggers) {
-      const e = add(g, "cylinder", t.hold ? mats.hole : mats.insert, false);
-      place(e, X(t.x), 0.04, Z(t.y), t.r * S * 2.2, 0.08, t.r * S * 2.2);
+      if (t.hold) {
+        const hole = add(g, "cylinder", mats.hole, false);
+        place(hole, X(t.x), 0.04, Z(t.y), t.r * S * 2.2, 0.08, t.r * S * 2.2);
+        continue;
+      }
+      const rgb = insertColor(t.id);
+      const disc = add(g, "cylinder", insertMaterial(rgb, 0.25), false);
+      place(disc, X(t.x), 0.05, Z(t.y), t.r * S * 2.2, 0.1, t.r * S * 2.2);
+      const glow = add(g, "plane", glowMaterial(rgb, 0.25), false);
+      place(glow, X(t.x), 0.1, Z(t.y), t.r * S * 4.5, 1, t.r * S * 4.5);
+      inserts.set(t.id, { disc, glow, rgb, level: 0.25, discMat: disc.render!.meshInstances[0]!.material as pc.StandardMaterial, glowMat: glow.render!.meshInstances[0]!.material as pc.StandardMaterial });
     }
+    buildCabinet(g);
     // ramps: translucent plastic strips on the playfield, raised by their zone
     for (const r of scene.ramps) {
       const hh = (scene.heights[r.zone] ?? 0.03) * S;
@@ -199,6 +254,53 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
       }
     }
   }
+
+  /** The cabinet around the table: wooden sides and front, and the backbox with its painted glass and the dot-matrix display. */
+  function buildCabinet(g: pc.Entity): void {
+    const wood = material({ diffuse: [0.16, 0.09, 0.05], metal: 0, gloss: 0.6 });
+    const black = material({ diffuse: [0.04, 0.04, 0.05], metal: 0.3, gloss: 0.7 });
+    const wS = sceneW * S;
+    const lS = sceneL * S;
+    for (const sx of [-1, 1]) {
+      const side = add(g, "box", wood);
+      place(side, sx * (wS / 2 + 2.6), 2, 0, 5.2, 8, lS + 4);
+      const trim = add(g, "box", mats.chrome);
+      place(trim, sx * (wS / 2 + 0.2), 4.1, 0, 0.5, 0.35, lS + 4);
+    }
+    const front = add(g, "box", wood);
+    place(front, 0, 1.2, lS / 2 + 2.6, wS + 10.4, 4.4, 5.2);
+    const bar = add(g, "box", mats.chrome);
+    place(bar, 0, 3.6, lS / 2 + 0.4, wS + 1, 0.6, 0.9);
+    // the backbox
+    const bz = -lS / 2 - 8;
+    const box = add(g, "box", black);
+    place(box, 0, 31, bz, wS + 10.4, 62, 16);
+    const glassMat = material({ diffuse: [0, 0, 0], emissive: [1, 1, 1], emissiveIntensity: 0.9, metal: 0, gloss: 0.9 });
+    glassMat.emissiveMap = texture(app.graphicsDevice, backglassTexture());
+    glassMat.update();
+    const glass = add(g, "plane", glassMat, false);
+    glass.setLocalPosition(0, 40, bz + 8.05);
+    glass.setLocalEulerAngles(90, 0, 0);
+    glass.setLocalScale(wS, 1, 40);
+    const dmdBack = add(g, "box", black, false);
+    place(dmdBack, 0, 13, bz + 8.02, wS * 0.7, 12, 0.6);
+    displayCanvas = document.createElement("canvas");
+    displayCanvas.width = 640;
+    displayCanvas.height = 160;
+    drawDisplay(displayCanvas, []);
+    displayTexture = texture(app.graphicsDevice, displayCanvas, false);
+    const dmdMat = material({ diffuse: [0, 0, 0], emissive: [1, 1, 1], emissiveIntensity: 1.2, metal: 0, gloss: 0.95 });
+    dmdMat.emissiveMap = displayTexture;
+    dmdMat.update();
+    const dmd = add(g, "plane", dmdMat, false);
+    dmd.setLocalPosition(0, 13, bz + 8.4);
+    dmd.setLocalEulerAngles(90, 0, 0);
+    dmd.setLocalScale(wS * 0.66, 1, wS * 0.66 * 0.25);
+  }
+
+  let displayCanvas: HTMLCanvasElement | null = null;
+  let displayTexture: pc.Texture | null = null;
+  let displayText = "";
 
   function flipperParts(i: number): pc.Entity[] {
     let parts = flipperEntities[i];
@@ -230,7 +332,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     const key = `${w}x${h} ${fov} ${pitch} ${sceneW} ${sceneL}`;
     if (key !== framedFor) {
       framedFor = key;
-      distance = fitDistance(pitch, fov, w / h, sceneW * S, sceneL * S, RAIL_H * 3);
+      distance = fitDistance(pitch, fov, w / h, sceneW * S, sceneL * S, RAIL_H * 3, [[(-sceneW * S) / 2, 20, (-sceneL * S) / 2], [(sceneW * S) / 2, 20, (-sceneL * S) / 2]]);
     }
     camera.camera!.fov = fov;
     camera.setPosition(0, Math.cos(pitch) * distance, Math.sin(pitch) * distance);
@@ -260,11 +362,28 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
         e.enabled = b !== undefined;
         if (b) place(e, X(b.x), b.r * S + b.z * S, Z(b.y), b.r * S * 2, b.r * S * 2, b.r * S * 2);
       });
+      for (const [id, ins] of inserts) {
+        const lamp = snap.lamps[id] ?? "off";
+        const level = LAMP_LEVEL[lamp];
+        if (level !== ins.level) {
+          ins.level = level;
+          ins.discMat.emissiveIntensity = level * 1.6;
+          ins.discMat.update();
+          ins.glowMat.emissiveIntensity = level;
+          ins.glowMat.update();
+        }
+      }
       updateCamera(snap);
       app.renderNextFrame = true;
       octx.setTransform(dpr, 0, 0, dpr, 0, 0);
       octx.clearRect(0, 0, w, h);
-      drawHud(octx, snap.hud.lines, w, h);
+      drawHud(octx, [], w, h); // only the names of the touch buttons: the lines are on the display
+      const text = snap.hud.lines.join("\n");
+      if (text !== displayText && displayCanvas && displayTexture) {
+        displayText = text;
+        drawDisplay(displayCanvas, snap.hud.lines);
+        displayTexture.upload();
+      }
     },
     dispose() {
       overlay.remove();

@@ -105,6 +105,13 @@ describe("buildScene", () => {
     expect(JSON.parse(JSON.stringify(sc))).toEqual(sc);
   });
 
+  it("gives each trigger its id, so a renderer can bind the lamp of the same name", () => {
+    const g = createGame(demoTable);
+    g.table.triggerIds.push("lane1");
+    g.table.world.triggers.push({ x: 0.1, y: 0.2, r: 0.01, zoneMask: 1, sw: 0, hold: false, kickx: 0, kicky: 0, kickSpeed: 0 });
+    expect(buildScene(g.table).triggers).toEqual([{ id: "lane1", x: 0.1, y: 0.2, r: 0.01, hold: false }]);
+  });
+
   it("names the kind of a collider by its switch and bounce", () => {
     const g = createGame(demoTable);
     const w = g.table.world;

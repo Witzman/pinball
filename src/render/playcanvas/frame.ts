@@ -15,9 +15,9 @@ export function onScreen(x: number, y: number, z: number, distance: number, pitc
   return depth > 1 && Math.abs(x / (depth * hTan)) < limit && Math.abs(up / (depth * vTan)) < limit;
 }
 
-/** The smallest distance at which the whole table (width x length, and rails `rail` high) fits on a screen of this aspect (width / height). */
-export function fitDistance(pitch: number, fovDeg: number, aspect: number, width: number, length: number, rail: number): number {
-  const corners = [-1, 1].flatMap((sx) => [-1, 1].flatMap((sz) => [0, rail].map((y) => [(sx * width) / 2, y, (sz * length) / 2] as const)));
+/** The smallest distance at which the whole table (width x length, and rails `rail` high) and any `extra` points (the backbox) fit on a screen of this aspect (width / height). */
+export function fitDistance(pitch: number, fovDeg: number, aspect: number, width: number, length: number, rail: number, extra: readonly (readonly [number, number, number])[] = []): number {
+  const corners = [...[-1, 1].flatMap((sx) => [-1, 1].flatMap((sz) => [0, rail].map((y) => [(sx * width) / 2, y, (sz * length) / 2] as const))), ...extra];
   let lo = 1;
   let hi = 100000;
   for (let i = 0; i < 40; i++) {
