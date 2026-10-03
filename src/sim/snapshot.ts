@@ -1,5 +1,6 @@
 import type { LitState } from "../rules";
 import type { LoadedTable } from "../table/load";
+import { cameraFor } from "./camera";
 import type { Game } from "./game";
 
 // What a renderer sees (issue #21): plain data, JSON-serialisable, metres, +y down the
@@ -41,7 +42,7 @@ export interface Snapshot {
   tick: number;
   paused: boolean;
   broken: boolean;
-  balls: { id: number; x: number; y: number; r: number; vx: number; vy: number; w: number; zone: number }[];
+  balls: { id: number; x: number; y: number; r: number; vx: number; vy: number; w: number; zone: number; z: number }[];
   flippers: FlipperView[];
   plunger: { x: number; y: number; dirx: number; diry: number; halfWidth: number; pos: number } | null;
   magnets: { x: number; y: number; r: number; on: boolean }[];
@@ -58,12 +59,11 @@ export interface StaticScene {
   walls: { ax: number; ay: number; bx: number; by: number; kind: "wall" | "rubber" | "switch"; zoneMask: number }[];
   posts: { x: number; y: number; r: number; kind: "post" | "switch"; zoneMask: number }[];
   triggers: { x: number; y: number; r: number; hold: boolean }[];
+  /** Height of each zone's level above the playfield, metres. */
+  heights: number[];
+  ramps: { zone: number; path: { x: number; y: number }[]; width: number }[];
 }
 
-/** The whole playfield seen from straight above. */
-export function topCamera(width: number, length: number): Camera {
-  return { mode: "top", cx: width / 2, cy: length / 2, zoom: 1, pitchDeg: 0, yawDeg: 0, fovDeg: 0 };
-}
 
 export function buildScene(table: LoadedTable): StaticScene {
   const w = table.world;
@@ -73,11 +73,13 @@ export function buildScene(table: LoadedTable): StaticScene {
     walls: w.segments.map((s) => ({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, kind: s.sw > 0 ? "switch" : s.e > 0.5 ? "rubber" : "wall", zoneMask: s.zoneMask })),
     posts: w.circles.map((c) => ({ x: c.x, y: c.y, r: c.r, kind: c.sw > 0 ? "switch" : "post", zoneMask: c.zoneMask })),
     triggers: w.triggers.map((t) => ({ x: t.x, y: t.y, r: t.r, hold: t.hold })),
+    heights: [...table.heights],
+    ramps: table.ramps.map((r) => ({ zone: r.zone, width: r.width, path: r.path.map((q) => ({ ...q })) })),
   };
 }
 
-/** A copy of the moment: nothing in it points into the game. `hudLines` is what the app wants on screen. */
-export function snapshot(g: Game, hudLines: readonly string[] = []): Snapshot {
+/** A copy of the moment: nothing in it points into the game. `hudLines` is what the app wants on screen; `cameraMode` picks the view. */
+export function snapshot(g: Game, hudLines: readonly string[] = [], cameraMode: Camera["mode"] = "top"): Snapshot {
   const w = g.table.world;
   const p = w.plunger;
   const game = g.rules.state.game;
@@ -85,12 +87,12 @@ export function snapshot(g: Game, hudLines: readonly string[] = []): Snapshot {
     tick: w.tick,
     paused: g.paused,
     broken: g.broken !== null,
-    balls: w.balls.map((b, id) => ({ id, x: b.x, y: b.y, r: b.r, vx: b.vx, vy: b.vy, w: b.w, zone: b.zone })),
+    balls: w.balls.map((b, id) => ({ id, x: b.x, y: b.y, r: b.r, vx: b.vx, vy: b.vy, w: b.w, zone: b.zone, z: g.table.heights[b.zone] ?? 0 })),
     flippers: w.flippers.map((f) => ({ px: f.px, py: f.py, tx: f.tx, ty: f.ty, dx: f.dx, dy: f.dy, k: f.k, cs: f.cs, r0: f.r0, r1: f.r1, up: f.on })),
     plunger: p ? { x: p.x, y: p.y, dirx: p.dirx, diry: p.diry, halfWidth: p.halfWidth, pos: p.pos } : null,
     magnets: w.magnets.map((m) => ({ x: m.x, y: m.y, r: m.r, on: m.on })),
     lamps: { ...g.rules.state.lamps },
     hud: { lines: [...hudLines], tilted: game?.tilted === true, phase: game?.phase ?? "" },
-    camera: topCamera(g.table.playfieldWidth, g.table.playfieldLength),
+    camera: cameraFor(cameraMode, g.table.playfieldWidth, g.table.playfieldLength, g.table.world.balls[0] ?? null),
   };
 }

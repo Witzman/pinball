@@ -141,6 +141,17 @@ export interface PlungerDef {
   material: string;
 }
 
+/**
+ * How a table looks in height; presentation only, physics keeps its 2D zones (#21).
+ * `heights[zone]` is the height of the ball centre's level above the playfield, mm
+ * (index 0 is the playfield and must be 0). A ramp is drawn along `path` (its centre
+ * line) with `width`; its walls and gates are still ordinary walls and gates.
+ */
+export interface VisualDef {
+  heights?: number[];
+  ramps?: { zone: number; path: Point[]; width: number }[];
+}
+
 export interface TableDef {
   id: string;
   name: string;
@@ -154,6 +165,7 @@ export interface TableDef {
   magnets?: MagnetDef[];
   flippers: FlipperDef[];
   plunger?: PlungerDef;
+  visual?: VisualDef;
   /** Named shots: ordered lists of switch names the rules treat as one shot. */
   shots: Record<string, string[]>;
 }

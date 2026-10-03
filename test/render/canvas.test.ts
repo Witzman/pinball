@@ -136,6 +136,43 @@ describe("the canvas renderer", () => {
     expect(log).toContain("fillStyle=#4da3ff"); // posts
   });
 
+  it("draws a ball above the playfield higher up the screen, with a shadow where it would be; a ball on the playfield has none", () => {
+    const { g, r, log } = setup();
+    const snap = snapshot(g);
+    const view = fitView(600, 900, 0.52, 1.05);
+    const radius = snap.balls[0]!.r * view.scale;
+    /** The y of every arc of the ball's size, in drawing order. */
+    const ballArcs = (z: number) => {
+      snap.balls = [{ ...snap.balls[0]!, x: 0.26, y: 0.5, z }];
+      log.length = 0;
+      r.draw(snap);
+      return log
+        .filter((c) => c.startsWith("arc("))
+        .map((c) => c.slice(4, -1).split(",").map(Number))
+        .filter((a) => Math.abs(a[2]! - radius) < 1e-9)
+        .map((a) => a[1]!);
+    };
+    const low = ballArcs(0);
+    const lowShadow = log.includes("fillStyle=rgba(0, 0, 0, 0.35)");
+    const high = ballArcs(0.03);
+    const lowBall = low.at(-1)!;
+    const highBall = high.at(-1)!;
+    expect(lowBall - highBall).toBeCloseTo(0.03 * view.scale, 6);
+    expect(high).toContain(lowBall); // the shadow, where the ball would be on the playfield
+    expect(low).toEqual([lowBall]);
+    expect(lowShadow).toBe(false);
+    expect(log).toContain("fillStyle=rgba(0, 0, 0, 0.35)");
+  });
+
+  it("draws the ramps of the scene under the walls", () => {
+    const { g, r, log } = setup();
+    log.length = 0;
+    r.draw(snapshot(g));
+    const band = log.indexOf("strokeStyle=rgba(154, 166, 196, 0.18)");
+    expect(band).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf("strokeStyle=#9aa6c4")).toBeGreaterThan(band);
+  });
+
   it("draws the hud lines of the snapshot", () => {
     const { g, r, log } = setup();
     log.length = 0;
