@@ -18,18 +18,20 @@ export const demoTable: TableDef = {
     { type: "segment", a: [483, 1045], b: [515, 1045], material: "metal" },
     // a guide and an arc
     { type: "segment", a: [5, 800], b: [180, 900], material: "rubber" },
+    // and the same on the right, so a ball coming down beside the plunger lane reaches the right flipper instead of the drain
+    { type: "segment", a: [483, 800], b: [340, 900], material: "rubber" },
     { type: "arc", c: [260, 260], r: 240, from: 200, to: 340, chords: 24, material: "metal" },
     // plunger lane, open at the top
     { type: "segment", a: [483, 1045], b: [483, 250], material: "metal" },
     // one-way flap across the lane: the ball goes up through it and cannot roll back down
     { type: "segment", a: [515, 205], b: [483, 250], material: "metal", oneWay: true },
-    // deflector at the top of the lane: steers the ball left, into the playfield
-    { type: "segment", a: [420, 30], b: [515, 125], material: "metal" },
+    // deflector at the top of the lane: steers the ball left, into the playfield; it runs from the top wall to the right wall, so there is no pocket behind it for a ball to rest in
+    { type: "segment", a: [395, 5], b: [515, 125], material: "metal" },
     // the rails of the ramp on the left (zone 1: a ball on the ramp touches only these)
     { type: "segment", a: [40, 600], b: [40, 300], material: "metal", zones: [1] },
     { type: "segment", a: [100, 600], b: [100, 300], material: "metal", zones: [1] },
-    // a standup target
-    { type: "segment", a: [300, 500], b: [380, 500], material: "rubber", switch: "target1" },
+    // a standup target, a little slanted: a ball dropped on a flat one would rest on it for ever
+    { type: "segment", a: [300, 490], b: [380, 510], material: "rubber", switch: "target1" },
   ],
   posts: [
     { at: [200, 400], r: 12, material: "rubber" },
