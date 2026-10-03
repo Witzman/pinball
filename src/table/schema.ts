@@ -10,6 +10,21 @@ export interface Material {
   mu: number;
 }
 
+/**
+ * A kicker (#49): a slingshot or a pop bumper. A ball that hits it at least `minHit` m/s
+ * along the normal, outside the cooldown, leaves with a normal speed of at least `speed`
+ * (the larger of the usual bounce and `speed`: the push does not depend on how hard the
+ * ball came). On a polyline or arc every chord kicks, and they share one cooldown.
+ */
+export interface KickDef {
+  /** m/s, 0 < speed <= 6. */
+  speed: number;
+  /** m/s, default 0.3; at least 0.1 (above the rest speed) and at most `speed`. */
+  minHit?: number;
+  /** ms from one kick to the next, integer 1..1000, default 30 (counted in whole ticks: give or take 1 ms). A ball between two facing kickers bounces for ever at the kick speed: a layout must not make that pocket. */
+  cooldownMs?: number;
+}
+
 interface WallBase {
   material: string;
   /** Heights this wall exists in; default [0] (the playfield). */
@@ -24,6 +39,7 @@ interface WallBase {
    * the table). A ball behind it passes through and cannot come back.
    */
   oneWay?: boolean;
+  kick?: KickDef;
 }
 
 export interface SegmentDef extends WallBase {
@@ -58,6 +74,7 @@ export interface PostDef {
   zones?: number[];
   switch?: string;
   shared?: boolean;
+  kick?: KickDef;
 }
 
 /**

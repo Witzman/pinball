@@ -4,7 +4,7 @@ import { hitFlipper, pushOutFlipper } from "./flipper";
 import { advancePlunger, hitPlunger } from "./plunger";
 import { hitCircle, setHit } from "./sweep";
 import type { Hit } from "./sweep";
-import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_TRIGGER } from "./types";
+import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_KICK, CONTACT_TRIGGER } from "./types";
 import type { Ball, Magnet, World } from "./types";
 
 /** The fixed physics step in seconds. Part of the replay header. */
@@ -38,7 +38,7 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
       const px = b.x + b.vx * t - c.x;
       const py = b.y + b.vy * t - c.y;
       const pl = Math.sqrt(px * px + py * py);
-      best = setHit(best, t, px / pl, py / pl, c.e, c.mu, c.sw);
+      best = setHit(best, t, px / pl, py / pl, c.e, c.mu, c.sw, 0, 0, c.kick ?? 0, c.kickMin ?? 0, c.kickCd ?? 0, c.kid ?? 0);
       continue;
     }
     const s = w.segments[idx]!;
@@ -64,7 +64,7 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
         const px = b.x + b.vx * t - s.ax;
         const py = b.y + b.vy * t - s.ay;
         const u = (px * abx + py * aby) / len2;
-        if (u >= 0 && u <= 1) best = setHit(best, t, nx, ny, s.e, s.mu, s.sw);
+        if (u >= 0 && u <= 1) best = setHit(best, t, nx, ny, s.e, s.mu, s.sw, 0, 0, s.kick ?? 0, s.kickMin ?? 0, s.kickCd ?? 0, s.kid ?? 0);
       }
     }
     for (let e = 0; e < 2; e++) {
@@ -75,7 +75,7 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
       const px = b.x + b.vx * t - cx;
       const py = b.y + b.vy * t - cy;
       const pl = Math.sqrt(px * px + py * py);
-      best = setHit(best, t, px / pl, py / pl, s.e, s.mu, s.sw);
+      best = setHit(best, t, px / pl, py / pl, s.e, s.mu, s.sw, 0, 0, s.kick ?? 0, s.kickMin ?? 0, s.kickCd ?? 0, s.kid ?? 0);
     }
   }
   for (const f of w.flippers) best = hitFlipper(f, b, rem, best);
@@ -229,6 +229,7 @@ export function step(w: World): void {
   // A flipper moves a few millimetres per tick at most (validateTable enforces
   // it stays under the ball radius), so it is advanced once and treated as static
   // at that pose while the ball is swept; its surface velocity enters the response.
+  for (let i = 0; i < w.kickWait.length; i++) if (w.kickWait[i]! > 0) w.kickWait[i]!--;
   for (const f of w.flippers) advanceFlipper(f, DT);
   if (w.plunger) advancePlunger(w.plunger, DT);
   for (let bi = 0; bi < w.balls.length; bi++) {
@@ -252,8 +253,23 @@ export function step(w: World): void {
       }
       b.x += b.vx * hit.t;
       b.y += b.vy * hit.t;
+      const vnIn = hit.kick > 0 ? -(b.vx * hit.nx + b.vy * hit.ny) : 0;
       const jn = respond(b, hit);
-      if (hit.sw > 0 && jn > 0) record(w, bi, hit.sw, jn, CONTACT_HIT);
+      let impulse = jn;
+      let kind = CONTACT_HIT;
+      // a kicker (#49): a hit hard enough, outside the cooldown, leaves with at least the kick speed along the normal
+      if (hit.kick > 0 && jn > 0 && vnIn >= hit.kmin && w.kickWait[hit.ki] === 0) {
+        const vnOut = b.vx * hit.nx + b.vy * hit.ny;
+        if (vnOut < hit.kick) {
+          const d = hit.kick - vnOut;
+          b.vx += d * hit.nx;
+          b.vy += d * hit.ny;
+          impulse = jn + b.m * d;
+          kind = CONTACT_KICK;
+          w.kickWait[hit.ki] = hit.kcd;
+        }
+      }
+      if (hit.sw > 0 && jn > 0) record(w, bi, hit.sw, impulse, kind);
       rem -= hit.t;
       if (rem <= 0) break;
     }

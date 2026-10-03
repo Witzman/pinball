@@ -23,6 +23,7 @@ export function hashWorld(w: World): number {
   }
   for (const f of w.flippers) h = mix(h, f.u);
   for (let i = 0; i < w.magnets.length; i++) if (w.magnets[i]!.on) h = mix(h, i + 1);
+  for (let i = 0; i < w.kickWait.length; i++) if (w.kickWait[i] !== 0) h = mix(mix(h, 1000 + i), w.kickWait[i]!);
   if (w.plunger) {
     h = mix(h, w.plunger.pos);
     h = mix(h, w.plunger.vel);

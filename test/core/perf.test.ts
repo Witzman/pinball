@@ -17,4 +17,17 @@ describe("step cost", () => {
     console.log(`bench: ${us.toFixed(2)} us per ball-step (404 segments, 3 balls)`);
     expect(us).toBeLessThan(BUDGET_US);
   });
+
+  it(`stays under ${BUDGET_US} us per ball-step with 20 kickers among the 404 segments (#49)`, () => {
+    const w = crowded(400, 9);
+    for (let i = 0; i < 20; i++) Object.assign(w.segments[4 + i * 20]!, { kick: 1.6, kickMin: 0.4, kickCd: 40, kid: i });
+    w.kickWait = new Int32Array(20);
+    for (let i = 0; i < 2000; i++) step(w);
+    const N = 50000;
+    const t0 = performance.now();
+    for (let i = 0; i < N; i++) step(w);
+    const us = ((performance.now() - t0) * 1000) / (N * w.balls.length);
+    console.log(`bench: ${us.toFixed(2)} us per ball-step (404 segments, 20 kickers, 3 balls)`);
+    expect(us).toBeLessThan(BUDGET_US);
+  });
 });

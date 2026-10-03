@@ -1,7 +1,12 @@
 import { DT } from "../core/step";
-import type { Point, TableDef } from "./schema";
+import type { KickDef, Point, TableDef } from "./schema";
 
 const MAX_ZONE = 30;
+/** Kickers (#49): the largest kick speed (m/s), the smallest minimum hit speed (above the core's rest speed), and the defaults. */
+export const MAX_KICK_SPEED = 6;
+const MIN_KICK_HIT = 0.1;
+export const DEFAULT_KICK_MIN = 0.3;
+export const DEFAULT_KICK_COOLDOWN_MS = 30;
 /** Largest magnet pull (m/s^2) a table may ask for. */
 const MAX_MAGNET_STRENGTH = 20;
 /** Geometry may overhang the playfield box by this much (mm), e.g. a plunger lane wall. */
@@ -44,8 +49,18 @@ export function validateTable(t: TableDef): string[] {
     }
   };
 
+  const checkKick = (where: string, k: KickDef | undefined) => {
+    if (k == null) return; // also a JSON null
+    if (!(Number.isFinite(k.speed) && k.speed > 0 && k.speed <= MAX_KICK_SPEED)) fail(`${where}: kick speed ${k.speed} must be a number above 0 and at most ${MAX_KICK_SPEED} m/s`);
+    const min = k.minHit ?? DEFAULT_KICK_MIN;
+    if (!(Number.isFinite(min) && min >= MIN_KICK_HIT && min <= k.speed)) fail(`${where}: kick minHit ${min} must be from ${MIN_KICK_HIT} up to the kick speed`);
+    const cd = k.cooldownMs ?? DEFAULT_KICK_COOLDOWN_MS;
+    if (!(Number.isInteger(cd) && cd >= 1 && cd <= 1000)) fail(`${where}: kick cooldownMs ${cd} must be an integer 1..1000`);
+  };
+
   t.walls.forEach((w, i) => {
     const where = `wall #${i} (${w.type})`;
+    checkKick(where, w.kick);
     if (!(w.material in t.materials)) fail(`${where}: material "${w.material}" is not defined`);
     checkZones(where, w.zones);
     useSwitch(w.switch, w.shared);
@@ -70,6 +85,7 @@ export function validateTable(t: TableDef): string[] {
 
   t.posts.forEach((p, i) => {
     const where = `post #${i}`;
+    checkKick(where, p.kick);
     if (!(p.material in t.materials)) fail(`${where}: material "${p.material}" is not defined`);
     if (!(p.r > 0)) fail(`${where}: radius must be positive`);
     if (!inside(p.at)) fail(`${where}: outside the playfield`);

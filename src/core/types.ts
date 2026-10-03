@@ -34,6 +34,14 @@ export interface Segment {
    * points to. A ball behind it passes through; once in front it cannot return.
    */
   oneWay?: boolean;
+  /** Kicker (#49): the ball leaves with at least this normal speed, m/s. Absent = a passive wall. */
+  kick?: number;
+  /** A hit slower than this (m/s along the normal) does not kick. */
+  kickMin?: number;
+  /** Ticks after a kick in which the next hit is a plain bounce. */
+  kickCd?: number;
+  /** Index into `World.kickWait`; the chords of one polyline or arc share it. */
+  kid?: number;
 }
 
 export interface Circle {
@@ -44,6 +52,11 @@ export interface Circle {
   mu: number;
   zoneMask: number;
   sw: number;
+  /** Kicker fields, as on Segment. */
+  kick?: number;
+  kickMin?: number;
+  kickCd?: number;
+  kid?: number;
 }
 
 /**
@@ -175,6 +188,8 @@ export const CONTACT_GATE_BA = 2;
 export const CONTACT_TRIGGER = 3;
 /** A ball was captured by a sinkhole. */
 export const CONTACT_CAPTURE = 4;
+/** A kicker pushed the ball (#49); recorded instead of CONTACT_HIT for that hit. */
+export const CONTACT_KICK = 5;
 
 /** Events on switches, in the order they happened. Cleared every step. */
 export interface ContactBuffer {
@@ -219,6 +234,8 @@ export interface World {
   drag: number;
   /** Spin damping, 1/s: spin decays as exp(-spinDamping t). 0 = none. */
   spinDamping: number;
+  /** Ticks left of each kicker's cooldown (index = `kid`); empty without kickers. */
+  kickWait: Int32Array;
   grid: Grid;
   contacts: ContactBuffer;
   tick: number;
