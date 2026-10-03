@@ -116,6 +116,26 @@ describe("the canvas renderer", () => {
     expect(JSON.stringify(g.table.world)).toBe(before);
   });
 
+  it("sets the device scale once on resize, so draw needs no transform of its own", () => {
+    const { g, r, log } = setup();
+    expect(log).toContain("setTransform(2,0,0,2,0,0)");
+    log.length = 0;
+    r.draw(snapshot(g));
+    expect(log.some((c) => c.startsWith("setTransform"))).toBe(false);
+  });
+
+  it("colours walls and posts by kind: switch amber, rubber and posts blue, plain walls grey", () => {
+    const g = createGame(demoTable);
+    const scene = buildScene(g.table);
+    const { ctx, log } = recordingCtx();
+    const kinds = new Set(scene.walls.map((w) => w.kind));
+    expect(kinds.size).toBeGreaterThan(1);
+    drawScene(ctx, 600, 900, scene, snapshot(g));
+    const colour = { wall: "#9aa6c4", rubber: "#4da3ff", switch: "#ffb84d" } as const;
+    for (const k of kinds) expect(log).toContain(`strokeStyle=${colour[k]}`);
+    expect(log).toContain("fillStyle=#4da3ff"); // posts
+  });
+
   it("draws the hud lines of the snapshot", () => {
     const { g, r, log } = setup();
     log.length = 0;

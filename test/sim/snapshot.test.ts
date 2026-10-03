@@ -15,7 +15,8 @@ describe("snapshot", () => {
   it("is plain data: it survives a JSON round trip and holds no NaN", () => {
     const s = snapshot(played(), ["A"]);
     expect(JSON.parse(JSON.stringify(s))).toEqual(s);
-    expect(JSON.stringify(s)).not.toMatch(/null|NaN/);
+    const finite = (v: unknown): boolean => (typeof v === "number" ? Number.isFinite(v) : v !== null && typeof v === "object" ? Object.values(v).every(finite) : true);
+    expect(finite(s)).toBe(true);
   });
 
   it("is the same for the same play, run twice", () => {
@@ -31,7 +32,9 @@ describe("snapshot", () => {
     s.flippers.forEach((f) => (f.px += 1));
     s.magnets.forEach((m) => (m.on = !m.on));
     s.lamps.x = "lit";
+    s.hud.lines.push("x");
     expect(JSON.stringify(g.table.world)).toBe(hash);
+    expect(g.rules.state.lamps).not.toHaveProperty("x");
     const again = snapshot(g);
     const kept = JSON.stringify(again);
     g.input.right = true;
@@ -56,11 +59,32 @@ describe("snapshot", () => {
     expect(s.broken).toBe(false);
   });
 
+  it("copies the magnets and shows them in their live state", () => {
+    const g = createGame(demoTable);
+    g.table.world.magnets.push({ x: 0.1, y: 0.2, r: 0.03, strength: 1, zoneMask: 1, on: true });
+    const s = snapshot(g);
+    expect(s.magnets).toEqual([{ x: 0.1, y: 0.2, r: 0.03, on: true }]);
+    s.magnets[0]!.on = false;
+    expect(g.table.world.magnets[0]!.on).toBe(true);
+    g.table.world.magnets[0]!.on = false;
+    expect(snapshot(g).magnets[0]!.on).toBe(false);
+  });
+
+  it("says when the game is paused or broken", () => {
+    const g = createGame(demoTable);
+    g.paused = true;
+    expect(snapshot(g).paused).toBe(true);
+    g.broken = "boom";
+    expect(snapshot(g).broken).toBe(true);
+  });
+
   it("knows the hud: lines as given, tilt and phase from the rules", () => {
     const g = played();
     expect(snapshot(g, ["X", "Y"]).hud.lines).toEqual(["X", "Y"]);
     expect(snapshot(g).hud.lines).toEqual([]);
     expect(snapshot(g).hud.tilted).toBe(false);
+    expect(snapshot(g).hud.phase).toBe(g.rules.state.game!.phase);
+    expect(snapshot(g).hud.phase).not.toBe("");
     g.rules.state.game!.tilted = true;
     expect(snapshot(g).hud).toMatchObject({ tilted: true, phase: g.rules.state.game!.phase });
   });
@@ -75,6 +99,8 @@ describe("buildScene", () => {
     expect(sc.posts.length).toBe(w.circles.length);
     expect(sc.triggers.length).toBe(w.triggers.length);
     expect(sc.width).toBe(g.table.playfieldWidth);
+    expect(sc.walls.map((x) => x.zoneMask)).toEqual(w.segments.map((x) => x.zoneMask));
+    expect(sc.posts.map((x) => x.zoneMask)).toEqual(w.circles.map((x) => x.zoneMask));
     expect(JSON.parse(JSON.stringify(sc))).toEqual(sc);
   });
 
