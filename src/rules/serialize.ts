@@ -42,7 +42,7 @@ const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFin
 const isNat = (v: unknown): v is number => isNum(v) && Number.isSafeInteger(v) && v >= 0;
 const recordOf = (v: unknown, ok: (x: unknown) => boolean): boolean => isRecord(v) && Object.values(v).every(ok);
 
-const KEYS = ["v", "tick", "rng", "lamps", "counters", "timers", "modes", "balls", "player"];
+const KEYS = ["v", "tick", "rng", "lamps", "counters", "timers", "shots", "modes", "balls", "player"];
 
 /** Problems with a parsed state, or an empty list. */
 export function validateState(s: unknown): string[] {
@@ -57,6 +57,7 @@ export function validateState(s: unknown): string[] {
   if (!recordOf(s.timers, (x) => isRecord(x) && isNat(x.due) && (x.every === undefined || (isNat(x.every) && x.every > 0)) && (x.tag === undefined || typeof x.tag === "string"))) {
     errs.push("timers must map ids to {due, every?, tag?} with whole-number ticks");
   }
+  if (!recordOf(s.shots, (x) => isRecord(x) && isNat(x.i) && x.i > 0 && isNat(x.at))) errs.push("shots must map names to {i >= 1, at}");
   if (!recordOf(s.modes, (x) => isRecord(x) && typeof x.phase === "string" && isNat(x.since) && recordOf(x.data, isNum))) {
     errs.push("modes must map ids to {phase, since, data}");
   }

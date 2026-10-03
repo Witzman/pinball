@@ -10,7 +10,10 @@ export type RulesEvent =
   | { t: "switch"; tick: number; ball: number; sw: string; kind: "hit" | "gateAB" | "gateBA" | "trigger" | "capture"; impulse: number }
   | { t: "button"; tick: number; button: "left" | "right" | "plunge"; down: boolean }
   | { t: "drain"; tick: number; ball: number }
-  | { t: "ballAtPlunger"; tick: number };
+  | { t: "ballAtPlunger"; tick: number }
+  // made by the engine itself:
+  | { t: "timer"; tick: number; id: string; tag?: string }
+  | { t: "shot"; tick: number; shot: string };
 
 export type SwitchEvent = Extract<RulesEvent, { t: "switch" }>;
 
@@ -61,6 +64,12 @@ export interface BallMgr {
   capacity: number;
 }
 
+/** A shot partway through its switch sequence: `i` switches seen, the first at tick `at`. */
+export interface ShotProgress {
+  i: number;
+  at: number;
+}
+
 /** All mutable rules state. JSON-safe on purpose: no Map, Set, function or class instance. */
 export interface RulesState {
   /** Shape version; bump when the shape changes. */
@@ -71,6 +80,7 @@ export interface RulesState {
   lamps: Record<string, LitState>;
   counters: Record<string, number>;
   timers: Record<string, TimerState>;
+  shots: Record<string, ShotProgress>;
   modes: Record<string, ModeState>;
   balls: BallMgr;
   player: { score: number; ballNo: number; persist: Record<string, number> };
@@ -89,6 +99,7 @@ export interface Ctx {
   after(id: string, ticks: number, tag?: string): void;
   every(id: string, ticks: number, tag?: string): void;
   cancel(id: string): void;
+  /** The running mode's state (live: `data` may be written), or null. */
   mode(id: string): ModeState | null;
   start(id: string): void;
   stop(id: string): void;
@@ -101,7 +112,7 @@ export interface Ctx {
 export interface PhaseDef {
   enter?(c: Ctx): void;
   exit?(c: Ctx): void;
-  /** Handlers by event type (`switch`, `button`, `drain`, `ballAtPlunger`) or `timer`. */
+  /** Handlers by event type: `switch`, `shot`, `timer`, `button`, `drain`, `ballAtPlunger`. */
   on?: Record<string, (c: Ctx, e: RulesEvent) => void>;
 }
 

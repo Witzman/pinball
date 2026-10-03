@@ -9,6 +9,7 @@ export function createState(seed: number): RulesState {
     lamps: {},
     counters: {},
     timers: {},
+    shots: {},
     modes: {},
     balls: { inPlay: 0, locked: {}, toFeed: 0, saver: { until: 0 }, capacity: 1 },
     player: { score: 0, ballNo: 0, persist: {} },

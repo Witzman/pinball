@@ -8,6 +8,7 @@ function busy(): RulesState {
   s.lamps = { brood: "lit", ramp: "collected", loop: "off" };
   s.counters = { loops: 3, trail: 0.5 };
   s.timers = { mission: { due: 5000, tag: "end" }, tick: { due: 1300, every: 100 } };
+  s.shots = { loop: { i: 1, at: 1200 } };
   s.modes = { forage: { phase: "running", since: 1000, data: { shots: 2 } } };
   s.balls = { inPlay: 1, locked: { dig: 2 }, toFeed: 0, saver: { until: 9000 }, capacity: 3 };
   s.player = { score: 1500000, ballNo: 2, persist: { eggs: 4 } };
@@ -58,6 +59,8 @@ describe("rules state", () => {
       (s) => { s.counters.loops = 4; },
       (s) => { s.timers.mission!.due += 1; },
       (s) => { s.timers.tick!.every = 101; },
+      (s) => { s.shots.loop!.i = 2; },
+      (s) => { s.shots.loop!.at += 1; },
       (s) => { s.modes.forage!.phase = "done"; },
       (s) => { s.modes.forage!.since += 1; },
       (s) => { s.modes.forage!.data.shots = 3; },
@@ -122,6 +125,8 @@ describe("rules state", () => {
     expect(bad((s) => { s.balls.inPlay = 5; })).toThrow(/inPlay 5 is above balls.capacity 3/);
     expect(bad((s) => { s.timers.mission.due = -1; })).toThrow(/whole-number ticks/);
     expect(bad((s) => { s.timers.tick.every = 0; })).toThrow(/whole-number ticks/);
+    expect(bad((s) => { s.shots.loop.i = 0; })).toThrow(/shots must map/);
+    expect(bad((s) => { s.shots.loop.at = -1; })).toThrow(/shots must map/);
     expect(bad((s) => { s.modes.forage.since = -1; })).toThrow(/modes must map/);
     expect(bad((s) => { s.player.ballNo = -1; })).toThrow(/player must be/);
     expect(bad((s) => { s.tick = 2 ** 60; })).toThrow(/tick must be/);
