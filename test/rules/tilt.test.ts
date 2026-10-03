@@ -126,6 +126,9 @@ describe("tilt", () => {
     expect(h.state.game!.tilted).toBe(true);
     expect(h.state.balls).toMatchObject({ inPlay: 1, locked: { saucer: 1 } });
     expect(h.cmds.filter((c) => c.c === "releaseBall")).toEqual([]);
+    h.at(20).drain().run(21); // the tilted ball drains: the ball ends although a ball is still locked
+    expect(h.state.game!.phase).toBe("bonus");
+    expect(h.state.balls.locked).toEqual({});
   });
 
   it("only counts nudges while a ball is played: not in attract, bonus or over", () => {
