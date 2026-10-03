@@ -17,7 +17,7 @@ let canvas: HTMLCanvasElement = found;
 const banner = document.getElementById("banner");
 
 async function boot(): Promise<void> {
-  const { def, setup, flow } = chooseTable(location.search);
+  const { def, setup, flow } = chooseTable();
   // what the machine remembers between visits: credits and scores
   const keeper = createKeeper(localStore(), {
     startCredits: flow.startCredits,
@@ -29,10 +29,10 @@ async function boot(): Promise<void> {
   const game = createGame(def, { ...setup, machine: toMachine(stored) });
   const keys: GameInput = { left: false, right: false, plunge: false, coin: false, start: false, buyin: false };
   const touch = new TouchTracker(innerWidth, innerHeight);
-  // the 3D table (#45) unless ?renderer=canvas, or the browser has no WebGL, or the engine fails to start
+  // the 3D table (#45) unless the browser has no WebGL or the engine fails to start
   const probe = document.createElement("canvas");
   const webgl = (probe.getContext("webgl2") ?? probe.getContext("webgl")) !== null;
-  let usePlayCanvas = chooseRenderer(location.search, webgl) === "playcanvas";
+  let usePlayCanvas = chooseRenderer(webgl) === "playcanvas";
   let renderer: Renderer | null = null;
   if (usePlayCanvas) {
     try {
@@ -161,23 +161,6 @@ async function boot(): Promise<void> {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-
-  // ?auto=<ms> plays a scripted start for screenshots: start a game, pull the plunger, let go after <ms>
-  const auto = Number(new URLSearchParams(location.search).get("auto"));
-  if (auto > 0) {
-    setTimeout(() => (keys.start = true), 300);
-    setTimeout(() => (keys.start = false), 400);
-    setTimeout(() => (keys.plunge = true), 900);
-    setTimeout(() => (keys.plunge = false), 900 + auto);
-    setInterval(() => mergeInput(), 16);
-    // ?shoot=1 as well: at 2 s put the ball in the middle of the table, fast, aimed at the bumpers (for screenshots of the effects)
-    if (new URLSearchParams(location.search).get("shoot") === "1") {
-      setTimeout(() => {
-        const ball = game.table.world.balls[0];
-        if (ball) Object.assign(ball, { x: 0.3, y: 0.62, vx: -0.35, vy: -2.6, zone: 0 });
-      }, 2000);
-    }
-  }
 
   // a handle for automated checks (screenshots); not part of the game
   (globalThis as Record<string, unknown>).__pinball = game;

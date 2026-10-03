@@ -8,10 +8,9 @@ export interface Choice {
   flow: FlowConfig;
 }
 
-/** The table to play: `?table=<id>` in the address, the demo table by default and for an id nobody knows. */
-export function chooseTable(search: string): Choice {
-  const id = new URLSearchParams(search).get("table") ?? "demo";
-  const def = allTables.find((t) => t.id === id) ?? allTables.find((t) => t.id === "demo")!;
+/** The table the page plays: The Colony. The demo table stays in the tables list as the test table; no address parameter chooses another. */
+export function chooseTable(): Choice {
+  const def = allTables.find((t) => t.id === "colony")!;
   const setup = tableSetups[def.id]!;
   return { def, setup, flow: setup.flow! };
 }
