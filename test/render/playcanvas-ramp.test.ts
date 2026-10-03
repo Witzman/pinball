@@ -70,4 +70,16 @@ describe("the geometry of a rising ramp", () => {
     expect(surf).toHaveLength(4);
     for (const t of surf) for (const v of t.v) expect(Number.isFinite(v[0]! + v[1]! + v[2]!)).toBe(true);
   });
+
+  it("gives the top of the surface texture coordinates: u across, v along the path, one unit per tile", () => {
+    const t = rampGeometry(path, 4, 0.5, 1.2, 10);
+    expect(t.surface.uvs.length).toBe((t.surface.positions.length / 3) * 2);
+    const top = t.surface.uvs.slice(0, 8); // the first quad is the top of the first segment: l0, r0, r1, l1
+    expect(top.slice(0, 4)).toEqual([0, 0, 1, 0]);
+    const len = Math.hypot(0, 4, 20); // the first segment's length
+    expect(top[5]).toBeCloseTo(len / 10, 6);
+    expect(top[7]).toBeCloseTo(len / 10, 6);
+    expect(top[4]).toBe(1);
+    expect(top[6]).toBe(0);
+  });
 });

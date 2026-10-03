@@ -11,23 +11,26 @@ export interface MeshData {
   positions: number[];
   normals: number[];
   indices: number[];
+  /** Texture coordinates, two per vertex. */
+  uvs: number[];
 }
 
 const cross = (a: number[], b: number[]): number[] => [a[1]! * b[2]! - a[2]! * b[1]!, a[2]! * b[0]! - a[0]! * b[2]!, a[0]! * b[1]! - a[1]! * b[0]!];
 const sub = (a: number[], b: number[]): number[] => [a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!];
 
 class Builder {
-  readonly data: MeshData = { positions: [], normals: [], indices: [] };
+  readonly data: MeshData = { positions: [], normals: [], indices: [], uvs: [] };
 
   /** A flat quad a, b, c, d (counter-clockwise seen from the side the normal points to). */
-  quad(a: number[], b: number[], c: number[], d: number[]): void {
+  quad(a: number[], b: number[], c: number[], d: number[], uv?: number[][]): void {
     const n = cross(sub(b, a), sub(d, a));
     const l = Math.hypot(n[0]!, n[1]!, n[2]!) || 1;
     const base = this.data.positions.length / 3;
-    for (const v of [a, b, c, d]) {
+    [a, b, c, d].forEach((v, k) => {
       this.data.positions.push(v[0]!, v[1]!, v[2]!);
       this.data.normals.push(n[0]! / l, n[1]! / l, n[2]! / l);
-    }
+      this.data.uvs.push(uv?.[k]?.[0] ?? 0, uv?.[k]?.[1] ?? 0);
+    });
     this.data.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
 }
@@ -36,8 +39,10 @@ class Builder {
  * The surface and the side rails of a ramp whose centre line passes through `path` (the height
  * is the y of each point), `width` wide, the surface `thickness` thick, the rails `railH` high.
  * The surface faces up; the rails face outwards and inwards. A path needs at least two points.
+ * The top of the surface carries texture coordinates: u from 0 (left edge) to 1 (right edge),
+ * v along the path, one unit per `tile` of length (the texture repeats).
  */
-export function rampGeometry(path: readonly Point3[], width: number, thickness: number, railH: number): { surface: MeshData; rails: MeshData; supports: Point3[] } {
+export function rampGeometry(path: readonly Point3[], width: number, thickness: number, railH: number, tile = 24): { surface: MeshData; rails: MeshData; supports: Point3[] } {
   const surface = new Builder();
   const rails = new Builder();
   const left: number[][] = [];
@@ -57,13 +62,17 @@ export function rampGeometry(path: readonly Point3[], width: number, thickness: 
   }
   const down = (v: number[], h: number): number[] => [v[0]!, v[1]! - h, v[2]!];
   const up = (v: number[], h: number): number[] => [v[0]!, v[1]! + h, v[2]!];
+  let run = 0; // length along the path up to the current point
   for (let i = 1; i < path.length; i++) {
+    const v0 = run / tile;
+    run += Math.hypot(path[i]!.x - path[i - 1]!.x, path[i]!.y - path[i - 1]!.y, path[i]!.z - path[i - 1]!.z);
+    const v1 = run / tile;
     const l0 = left[i - 1]!;
     const l1 = left[i]!;
     const r0 = right[i - 1]!;
     const r1 = right[i]!;
     // top (normal up), bottom (normal down)
-    surface.quad(l0, r0, r1, l1);
+    surface.quad(l0, r0, r1, l1, [[0, v0], [1, v0], [1, v1], [0, v1]]);
     surface.quad(down(l0, thickness), down(l1, thickness), down(r1, thickness), down(r0, thickness));
     // the edges of the slab
     surface.quad(down(l0, thickness), l0, l1, down(l1, thickness));
