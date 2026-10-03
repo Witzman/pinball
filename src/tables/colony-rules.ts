@@ -23,7 +23,9 @@ function closeSkill(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0]): v
 export const colonyRules: TableRules = {
   modes: {},
   onBallStart(c) {
-    c.reset("superDone");
+    // a ball the saver serves again is the same ball: no second skill shot (a new ball clears the counters)
+    if (c.count("skillTried") > 0) return;
+    c.add("skillTried");
     c.add("skillOpen");
     const lit = LANES[Math.floor(c.rnd() * LANES.length)]!;
     for (const l of LANES) c.setLamp(l, l === lit ? "lit" : "off");

@@ -57,6 +57,30 @@ describe("the skill shot", () => {
     expect([...seen].sort()).toEqual(["skill1", "skill2", "skill3"]);
   });
 
+  it("tells the display which lane is lit when the ball starts", () => {
+    const h = harness(colonyRules, { flow: colonyFlow, shots: colonyTable.shots });
+    h.at(1).button("start", true).at(2).ballAtPlunger().run(3);
+    const l = lit(h)[0]!;
+    expect(h.cmds).toContainEqual({ c: "dmd", show: { id: "skillLane", args: { lane: l } } });
+  });
+
+  it("does not offer the skill shot again to a ball the saver serves again, and does to the next ball", () => {
+    const h = harness(colonyRules, { flow: colonyFlow, shots: colonyTable.shots });
+    h.at(1).button("start", true).at(2).ballAtPlunger().run(3);
+    h.at(10).hit("slingL", 0, "kick").at(20).drain().run(21); // the saver was started by the first switch: the same ball comes back
+    expect(h.cmds.some((c) => c.c === "feedBall")).toBe(true);
+    h.take();
+    h.at(30).ballAtPlunger().run(31);
+    expect(lit(h)).toEqual([]);
+    h.at(40).hit("skill1").at(50).hit("skill2").at(60).hit("skill3").run(70);
+    expect(score(h)).toBe(SWITCH_POINTS.slingL);
+    const next = harness(colonyRules, { flow: { ...colonyFlow, saverTicks: 0 }, shots: colonyTable.shots });
+    next.at(1).button("start", true).at(2).ballAtPlunger().run(3);
+    next.at(10).drain().run(11);
+    next.at(4000).ballAtPlunger().run(4001);
+    expect(lit(next)).toHaveLength(1);
+  });
+
   it("awards a million for reaching the lit lane first, once, and tells the display", () => {
     const h = ball();
     const l = lit(h)[0]!;
@@ -157,5 +181,27 @@ describe("the skill shot on the physical table", () => {
   it("pays no super skill shot for a short pull, which does not run the whole lane", () => {
     const s = launch(120);
     expect(s).toBeLessThan(SUPER_SKILL_SHOT);
+  });
+
+  it("runs more of the skill lane the longer the pull: none, the first lane, then all three (the pull table is pinned so a plunger tuning cannot make the super trivial or impossible unnoticed)", () => {
+    const lanes = (ms: number): string[] => {
+      const seen: string[] = [];
+      const rules = { ...colonyRules, onSwitch: (c: Parameters<NonNullable<typeof colonyRules.onSwitch>>[0], e: Parameters<NonNullable<typeof colonyRules.onSwitch>>[1]) => { if (e.sw.startsWith("skill")) seen.push(e.sw); colonyRules.onSwitch!(c, e); } };
+      const g = createGame(colonyTable, { ...tableSetups.colony!, rules, seed: 3 });
+      g.input.start = true;
+      advance(g, 5);
+      g.input.start = false;
+      advance(g, 5);
+      g.input.plunge = true;
+      advance(g, 50);
+      for (let i = 0; i < ms; i++) tick(g);
+      g.input.plunge = false;
+      for (let i = 0; i < 3000; i++) tick(g);
+      return seen;
+    };
+    expect(lanes(60)).toEqual([]);
+    expect(lanes(110)[0]).toBe("skill1");
+    expect(lanes(110)).not.toContain("skill3");
+    expect(lanes(300).slice(0, 3)).toEqual(["skill1", "skill2", "skill3"]);
   });
 });
