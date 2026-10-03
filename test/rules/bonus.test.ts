@@ -257,11 +257,15 @@ describe("ball end edge cases", () => {
   });
 
   it("does not let the first switch start a saver the table already started by hand", () => {
-    const h = game();
-    h.at(10).hit("saver").at(20).hit("loop").run(21);
+    const byHand: TableRules = { modes: {}, onBallStart: (c) => c.game.saver(500), onSwitch: (c) => c.add("hits") };
+    const h = harness(byHand, { flow: cfg });
+    h.at(1).button("start", true).at(2).ballAtPlunger().run(3);
+    expect(h.state.balls.saver.until).toBe(503); // from the table's call at tick 2
+    h.at(20).hit("loop").run(21);
     expect(h.state.game!.saverWait).toBe(false);
-    expect(h.state.balls.saver.until).toBe(510); // from the table's call at tick 10, not from the switch at 20
+    expect(h.state.balls.saver.until).toBe(503); // the switch at 20 did not restart it as 320
   });
+
 });
 
 describe("extra balls", () => {
