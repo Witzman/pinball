@@ -145,8 +145,10 @@ function applyInput(g: Game): void {
   const w = g.table.world;
   const l = g.table.flipperIds.indexOf("left");
   const r = g.table.flipperIds.indexOf("right");
-  if (l >= 0) w.flippers[l]!.on = g.input.left;
-  if (r >= 0) w.flippers[r]!.on = g.input.right;
+  // a tilted ball is dead: the flippers do not answer (derived from the rules' state, so it survives a recovery)
+  const dead = g.rules.state.game?.tilted === true;
+  if (l >= 0) w.flippers[l]!.on = !dead && g.input.left;
+  if (r >= 0) w.flippers[r]!.on = !dead && g.input.right;
   if (w.plunger) w.plunger.pull = g.input.plunge ? 1 : 0;
 }
 

@@ -45,6 +45,10 @@ export function harness(table: TableRules, opts: Partial<RulesOptions> = {}) {
       push({ t: "drain", tick: cursor, ball });
       return h;
     },
+    nudge(dir: "left" | "right" | "up" = "left") {
+      push({ t: "nudge", tick: cursor, dir });
+      return h;
+    },
     ballAtPlunger() {
       push({ t: "ballAtPlunger", tick: cursor });
       return h;

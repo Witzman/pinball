@@ -5,7 +5,7 @@ import type { GameState, RulesState } from "../../src/rules";
 
 function state(over: Partial<GameState> = {}, score = 0, ballNo = 0): RulesState {
   const s = createState(1);
-  s.game = { phase: "attract", credits: 2, shootAgain: 0, bought: false, tilted: false, replayDone: false, extraBalls: 0, saverWait: false, board: { main: [], bought: [] }, ...over };
+  s.game = { phase: "attract", credits: 2, shootAgain: 0, bought: false, tilted: false, replayDone: false, extraBalls: 0, saverWait: false, tiltHeat: 0, tiltAt: 0, board: { main: [], bought: [] }, ...over };
   s.player.score = score;
   s.player.ballNo = ballNo;
   return s;

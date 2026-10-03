@@ -87,6 +87,9 @@ export interface GameState {
   extraBalls: number;
   /** The ball saver is set to start at the ball's first switch: true until that switch. */
   saverWait: boolean;
+  /** Tilt: nudges that have not cooled yet, and the tick that heat last cooled to. Both 0 and not saved when quiet. */
+  tiltHeat: number;
+  tiltAt: number;
   /** Scores of the machine, highest first. */
   board: { main: number[]; bought: number[] };
 }

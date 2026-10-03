@@ -56,6 +56,19 @@ function compute(): Record<string, number> {
     allTables,
     tableSetups,
   );
+  const tilt = runReplay(
+    {
+      header: { format: 1, tableId: "demo", dt: 0.001, seed: 2, ticks: 3000 },
+      inputs: [
+        { tick: 10, action: "start_down" }, { tick: 20, action: "start_up" },
+        { tick: 400, action: "nudge_left" }, { tick: 700, action: "nudge_right" }, { tick: 1000, action: "nudge_up" },
+      ],
+    },
+    allTables,
+    { demo: { ...tableSetups.demo!, flow: { ...tableSetups.demo!.flow!, tilt: { free: 1, warnings: 1, decayTicks: 3000 } } } },
+  );
+  out["game/tilt"] = tilt.hash;
+  out["game/tilt/rules"] = tilt.rulesHash;
   out["game/demo-start"] = game.hash;
   out["game/demo-start/rules"] = game.rulesHash;
   return out;
