@@ -27,6 +27,8 @@ export interface Cue {
 export type Command =
   | { c: "setLamp"; lamp: string; state: "off" | "lit" | "flash" }
   | { c: "fireSolenoid"; id: string }
+  /** Kicks out the ball locked in the sinkhole `lock`; an error if none is held there. */
+  | { c: "releaseBall"; lock: string }
   | { c: "magnet"; id: string; on: boolean }
   | { c: "lockBall"; ball: number; lock: string }
   | { c: "feedBall"; feed: string }

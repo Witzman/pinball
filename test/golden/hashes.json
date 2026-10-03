@@ -3,6 +3,13 @@
   "scene/crowded-150-8": 1738193386,
   "scene/crowded-400-9": 569979216,
   "replay/flipper-hammering": 2522027788,
+  "replay/flipper-hammering/rules": 446440863,
   "replay/idle": 2705931017,
-  "replay/launch-and-flip": 1614421550
+  "replay/idle/rules": 2817202713,
+  "replay/launch-and-flip": 1614421550,
+  "replay/launch-and-flip/rules": 446440863,
+  "rules/saucer-seed5": 693966001,
+  "rules/saucer-seed5/rules": 3641026101,
+  "rules/saucer-seed6": 693966001,
+  "rules/saucer-seed6/rules": 2765472418
 }

@@ -81,6 +81,8 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
   const shotNames = Object.keys(shots).sort(byId);
   let out: Command[] = [];
   let depth = 0;
+  /** Ball of the switch event being handled, or -1. */
+  let curBall = -1;
 
   // Earliest due timer, or Infinity. Recomputed lazily so an idle tick costs one comparison.
   let minDue = Infinity;
@@ -197,14 +199,29 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
     },
     ball: {
       inPlay: () => state.balls.inPlay,
-      lock() {
-        throw new Error("ball.lock arrives with the ball manager wiring");
+      lock(lockId) {
+        needId("ball.lock", lockId);
+        if (curBall < 0) throw new Error("ball.lock: only a switch event has a ball to lock");
+        const b = state.balls;
+        b.locked[lockId] = (own(b.locked, lockId) ?? 0) + 1;
+        b.inPlay = Math.max(0, b.inPlay - 1);
+        out.push({ c: "lockBall", ball: curBall, lock: lockId });
       },
-      release() {
-        throw new Error("ball.release arrives with the ball manager wiring");
+      release(lockId) {
+        const b = state.balls;
+        const n = own(b.locked, lockId) ?? 0;
+        if (n < 1) throw new Error(`ball.release: nothing is locked in "${lockId}"`);
+        if (b.inPlay + b.toFeed + 1 > b.capacity) throw new Error(`ball.release: more than ${b.capacity} ball(s) in play`);
+        if (n === 1) delete b.locked[lockId];
+        else b.locked[lockId] = n - 1;
+        b.inPlay += 1;
+        out.push({ c: "releaseBall", lock: lockId });
       },
       feed() {
-        throw new Error("ball.feed arrives with the ball manager wiring");
+        const b = state.balls;
+        if (b.inPlay + b.toFeed + 1 > b.capacity) throw new Error(`ball.feed: more than ${b.capacity} ball(s) in play`);
+        b.toFeed += 1;
+        out.push({ c: "feedBall", feed: "plunger" });
       },
     },
     emit: (cmd) => {
@@ -273,6 +290,25 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
   };
 
   const handle = (e: RulesEvent): void => {
+    curBall = e.t === "switch" ? e.ball : -1;
+    try {
+      dispatch(e);
+    } finally {
+      curBall = -1;
+    }
+  };
+
+  const dispatch = (e: RulesEvent): void => {
+    const b = state.balls;
+    if (e.t === "drain") {
+      if (b.inPlay < 1) throw new Error("a ball drained but no ball is in play: the ball accounting is off");
+      b.inPlay -= 1;
+    } else if (e.t === "ballAtPlunger") {
+      if (b.inPlay + 1 > b.capacity) throw new Error(`a ball arrived at the plunger but ${b.capacity} ball(s) are already in play`);
+      b.inPlay += 1;
+      b.toFeed = Math.max(0, b.toFeed - 1);
+      state.shots = {}; // a sequence started with the last ball means nothing for the next
+    }
     toModes(e);
     if (e.t === "switch") {
       table.onSwitch?.(ctx, e);
@@ -283,9 +319,10 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
       }
     } else if (e.t === "drain") {
       table.onDrain?.(ctx);
+    } else if (e.t === "ballAtPlunger") {
+      table.onBallStart?.(ctx);
     }
-    // button and ballAtPlunger reach the modes only; the table's onBallStart and
-    // `persist` are called by the ball manager wiring (step 4)
+    // button events reach the modes only. `persist` is read by the ball flow of #11.
   };
 
   const fireTimers = (tick: number): void => {
