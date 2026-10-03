@@ -1,3 +1,5 @@
+import { FULL_STRENGTH_SPEED } from "./audio-events";
+import type { AudioBatch, AudioEvent } from "./audio-events";
 import type { Ball } from "../core/types";
 import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_KICK, CONTACT_TRIGGER } from "../core/types";
 import { kickHeld, nudge as shove, step } from "../core/step";
@@ -52,6 +54,8 @@ export interface Game {
   /** A nudge waiting for the next tick, and the tick the last one was applied (-cooldown: none yet). */
   pendingNudge: NudgeDir | null;
   lastNudge: number;
+  /** What the sound layer should hear, since it last took it (`takeAudio`); capped so nobody listening costs nothing. */
+  audioOut: AudioEvent[];
   /** Scratch lists reused every tick. */
   events: RulesEvent[];
   cmds: Command[];
@@ -92,7 +96,7 @@ export function createGame(def: TableDef, opts: GameOptions = {}): Game {
   const idle = (): GameInput => ({ left: false, right: false, plunge: false, coin: false, start: false, buyin: false });
   const g: Game = {
     table, input: idle(), paused: false, accMs: 0, drains: 0,
-    rules, setup: { def, options: opts }, errors: [], errorCount: 0, errorStreak: 0, calmTicks: 0, broken: null, applied: 0, outbox: [], pressed: idle(), arrivals: 0, pendingNudge: null, lastNudge: -NUDGE_COOLDOWN, events: [], cmds: [], drained: [],
+    rules, setup: { def, options: opts }, errors: [], errorCount: 0, errorStreak: 0, calmTicks: 0, broken: null, applied: 0, outbox: [], audioOut: [], pressed: idle(), arrivals: 0, pendingNudge: null, lastNudge: -NUDGE_COOLDOWN, events: [], cmds: [], drained: [],
   };
   if (!opts.flow) {
     // free play: a ball waits on the plunger. With a flow the first ball comes when a game starts.
@@ -141,6 +145,11 @@ export function setPaused(g: Game, paused: boolean): void {
   g.paused = paused;
 }
 
+const AUDIO_CAP = 512;
+function audio(g: Game, e: AudioEvent): void {
+  if (g.audioOut.length < AUDIO_CAP) g.audioOut.push(e);
+}
+
 function applyInput(g: Game): void {
   const w = g.table.world;
   const l = g.table.flipperIds.indexOf("left");
@@ -149,9 +158,18 @@ function applyInput(g: Game): void {
   // `tilted` stays set until the next serve, so only the play phase is dead, not the attract screen after it
   const game = g.rules.state.game;
   const dead = game?.tilted === true && game.phase === "play";
-  if (l >= 0) w.flippers[l]!.on = !dead && g.input.left;
-  if (r >= 0) w.flippers[r]!.on = !dead && g.input.right;
-  if (w.plunger) w.plunger.pull = g.input.plunge ? 1 : 0;
+  const flip = (i: number, side: "L" | "R", want: boolean) => {
+    const f = w.flippers[i]!;
+    if (want !== f.on && !dead) audio(g, { a: "flip", side, up: want }); // the tilt dropping a flipper is not a click
+    f.on = want;
+  };
+  if (l >= 0) flip(l, "L", !dead && g.input.left);
+  if (r >= 0) flip(r, "R", !dead && g.input.right);
+  if (w.plunger) {
+    const p = w.plunger;
+    if (p.pull === 1 && !g.input.plunge) audio(g, { a: "plunge", s: Math.min(1, p.pos / p.stroke) });
+    p.pull = g.input.plunge ? 1 : 0;
+  }
 }
 
 const KINDS = {
@@ -171,6 +189,7 @@ function buttonEvents(g: Game, tick: number, out: RulesEvent[]): void {
     if (g.input[b] !== g.pressed[b]) {
       g.pressed[b] = g.input[b];
       out.push({ t: "button", tick, button: b, down: g.input[b] });
+      if (g.input[b] && (b === "coin" || b === "start" || b === "buyin")) audio(g, { a: "btn", button: b });
     }
   }
 }
@@ -223,7 +242,12 @@ export function tick(g: Game): void {
   if (nudged !== null) events.push({ t: "nudge", tick: t, dir: nudged });
   const c = w.contacts;
   for (let i = 0; i < c.n; i++) {
-    events.push({ t: "switch", tick: t, ball: c.ball[i]!, sw: g.table.switchNames[c.sw[i]! - 1]!, kind: KINDS[c.kind[i]! as keyof typeof KINDS], impulse: c.impulse[i]! });
+    const sw = g.table.switchNames[c.sw[i]! - 1]!;
+    const kind = KINDS[c.kind[i]! as keyof typeof KINDS];
+    events.push({ t: "switch", tick: t, ball: c.ball[i]!, sw, kind, impulse: c.impulse[i]! });
+    const cls = g.table.sounds[sw];
+    const s = Math.min(1, c.impulse[i]! / (g.table.ballMass * FULL_STRENGTH_SPEED));
+    audio(g, { a: "switch", sw, kind: kind === "gateAB" || kind === "gateBA" ? "gate" : kind, s, ...(cls !== undefined ? { cls } : {}) });
   }
   const drained = g.drained;
   drained.length = 0;
@@ -231,6 +255,7 @@ export function tick(g: Game): void {
     if (w.balls[i]!.y > g.table.playfieldLength + DRAIN_MARGIN) {
       drained.push(i);
       events.push({ t: "drain", tick: t, ball: i });
+      audio(g, { a: "drain" });
       g.drains += 1;
     }
   }
@@ -241,6 +266,15 @@ export function tick(g: Game): void {
   g.rules.step(t, events, g.cmds);
   applyCommands(g, g.cmds);
   for (let k = drained.length - 1; k >= 0; k--) w.balls.splice(drained[k]!, 1);
+}
+
+/** Takes what the sound layer should hear since the last call, and how fast the fastest ball rolls (0..1; 5 m/s is full). */
+export function takeAudio(g: Game): AudioBatch {
+  const events = g.audioOut;
+  g.audioOut = [];
+  let fastest = 0;
+  for (const b of g.table.world.balls) if (b.hold === 0) fastest = Math.max(fastest, Math.hypot(b.vx, b.vy));
+  return { events, roll: Math.min(1, fastest / 5) };
 }
 
 /** Takes the commands the rules gave since the last call (lamps, display, sound for the leaves). */
@@ -285,6 +319,7 @@ export function recover(g: Game, error: unknown): void {
   });
   g.pressed = { left: false, right: false, plunge: false, coin: false, start: false, buyin: false };
   g.events.length = 0;
+  g.audioOut.length = 0;
   g.cmds.length = 0;
   g.drained.length = 0;
   g.arrivals = 0;
@@ -328,4 +363,5 @@ export function advance(g: Game, dtMs: number): void {
 }
 
 export { snapshot } from "./snapshot";
+export type { AudioBatch, AudioEvent, SoundClass } from "./audio-events";
 export type { Camera, FlipperView, Snapshot, StaticScene } from "./snapshot";

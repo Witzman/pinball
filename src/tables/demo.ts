@@ -49,5 +49,6 @@ export const demoTable: TableDef = {
     { id: "left", pivot: [150, 900], length: 60, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber" },
     { id: "right", pivot: [370, 900], length: 60, rBase: 9.5, rTip: 5, restDeg: 150, activeDeg: 210, upMs: 40, downMs: 100, material: "rubber" },
   ],
+  sounds: { target1: "target" },
   shots: { target: ["target1"] },
 };

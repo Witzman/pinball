@@ -169,6 +169,10 @@ export interface VisualDef {
   ramps?: { zone: number; path: Point[]; width: number }[];
 }
 
+/** How a table can say a switch should sound (#15). */
+export const SOUND_CLASSES = ["pop", "sling", "rollover", "target", "wall"] as const;
+export type SoundClass = (typeof SOUND_CLASSES)[number];
+
 export interface TableDef {
   id: string;
   name: string;
@@ -183,6 +187,8 @@ export interface TableDef {
   flippers: FlipperDef[];
   plunger?: PlungerDef;
   visual?: VisualDef;
+  /** How a switch sounds (#15): a class per switch name; without one the sound layer picks by what was hit. */
+  sounds?: Record<string, SoundClass>;
   /** Named shots: ordered lists of switch names the rules treat as one shot. */
   shots: Record<string, string[]>;
 }

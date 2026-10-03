@@ -12,9 +12,10 @@ const ALLOWED: Record<string, string[]> = {
   tables: ["table", "rules", "tables"],
   sim: ["core", "table", "rules", "sim"],
   input: ["input", "sim"],
+  audio: ["audio", "sim"],
   render: ["sim", "render"],
   storage: ["storage"],
-  app: ["app", "input", "render", "sim", "rules", "tables", "table", "core", "storage"],
+  app: ["app", "audio", "input", "render", "sim", "rules", "tables", "table", "core", "storage"],
 };
 
 const root = fileURLToPath(new URL("../src", import.meta.url));

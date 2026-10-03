@@ -8,6 +8,7 @@ import { demoTable } from "../../src/tables/demo";
 function plain(): TableDef {
   const t = structuredClone(demoTable);
   for (const c of [...t.walls, ...t.posts]) delete c.kick;
+  delete t.sounds;
   return t;
 }
 function withKick(patch: (t: TableDef) => void): TableDef {
@@ -84,5 +85,19 @@ describe("kicker validation", () => {
   it("says where the bad kicker is", () => {
     expect(problems(wall({ speed: 0 }))).toMatch(/wall #\d+ \(segment\): kick speed/);
     expect(problems(post({ speed: 0 }))).toMatch(/post #\d+: kick speed/);
+  });
+});
+
+describe("sound classes in table data (#15)", () => {
+  const withSounds = (sounds: Record<string, string>): TableDef => withKick((x) => void (x.sounds = sounds as TableDef["sounds"]));
+
+  it("are optional, validated against the switches and the known classes, and loaded as a copy", () => {
+    expect(problems(withKick(() => undefined))).toBe("");
+    expect(problems(withSounds({ target1: "target" }))).toBe("");
+    expect(problems(withSounds({ nowhere: "pop" }))).toMatch(/"nowhere" is not a switch/);
+    expect(problems(withSounds({ target1: "kazoo" }))).toMatch(/unknown class "kazoo"/);
+    const t = loadTable(withSounds({ target1: "target" }));
+    expect(t.sounds).toEqual({ target1: "target" });
+    expect(loadTable(withKick(() => undefined)).sounds).toEqual({});
   });
 });

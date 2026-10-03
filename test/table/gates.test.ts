@@ -9,6 +9,7 @@ import type { GateDef, TableDef } from "../../src/table/schema";
 function withGates(gates: NonNullable<TableDef["gates"]>, walls: TableDef["walls"] = []): TableDef {
   const def: TableDef = structuredClone(demoTable);
   def.walls = walls;
+  delete def.sounds; // the demo's sound classes name switches of walls this test throws away
   def.posts = [];
   def.shots = {};
   def.plunger = undefined;
