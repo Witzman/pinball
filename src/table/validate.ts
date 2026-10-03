@@ -1,4 +1,5 @@
 import { DT } from "../core/step";
+import { SOUND_CLASSES } from "./schema";
 import type { KickDef, Point, TableDef } from "./schema";
 
 const MAX_ZONE = 30;
@@ -181,6 +182,11 @@ export function validateTable(t: TableDef): string[] {
       if (!r.path.every(inside)) fail(`${where}: outside the playfield`);
       if (!(r.width > 0 && r.width <= t.playfield.width)) fail(`${where}: width must be positive and fit the playfield`);
     });
+  }
+
+  for (const [sw, cls] of Object.entries(t.sounds ?? {})) {
+    if (!users.has(sw)) fail(`sounds: "${sw}" is not a switch of this table`);
+    if (!SOUND_CLASSES.includes(cls)) fail(`sounds: "${sw}" has the unknown class "${cls}"`);
   }
 
   for (const [name, u] of users) {

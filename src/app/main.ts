@@ -1,6 +1,7 @@
 import { applyKey, ButtonLatch, TouchTracker } from "../input/input";
 import { createCanvasRenderer } from "../render/canvas";
-import { advance, createGame, nudge, setPaused, takeCommands } from "../sim/game";
+import { createAudio } from "../audio";
+import { advance, createGame, nudge, setPaused, takeAudio, takeCommands } from "../sim/game";
 import type { GameInput } from "../sim/game";
 import { buildScene, snapshot } from "../sim/snapshot";
 import { localStore } from "../storage";
@@ -42,9 +43,21 @@ async function boot(): Promise<void> {
   addEventListener("resize", resize);
   resize();
 
+  // sound (#15): procedural, opened by the first gesture, loaded then and not before
+  const audio = createAudio(localStore());
+  // every gesture asks until the device runs: Safari wants the resume inside a gesture, and a first key like Escape may not count
+  const GESTURES = ["keydown", "pointerdown", "touchend", "click"] as const;
+  const gesture = (): void => {
+    audio.unlock();
+    if (audio.running()) for (const type of GESTURES) removeEventListener(type, gesture, true);
+  };
+  for (const type of GESTURES) addEventListener(type, gesture, true);
+
   function pause(on: boolean): void {
     setPaused(game, on);
     if (banner) banner.hidden = !on;
+    if (on) audio.suspend();
+    else audio.resume();
   }
 
   // a tap shorter than a frame must still count: the latch holds a press until the frame's ticks have run
@@ -61,6 +74,7 @@ async function boot(): Promise<void> {
 
   addEventListener("keydown", (e) => {
     if (e.repeat) return;
+    if (e.code === "KeyM") audio.toggleMute();
     const result = applyKey(keys, e.code, true);
     if (result === "pause") pause(!game.paused);
     else if (result !== undefined) nudge(game, result);
@@ -110,7 +124,9 @@ async function boot(): Promise<void> {
   function frame(now: number): void {
     advance(game, now - last);
     give(latch.frameDone());
-    keeper.apply(takeCommands(game)); // credits and scores are saved; lamps, display and sound have no listeners yet (#14, #15)
+    const cmds = takeCommands(game);
+    keeper.apply(cmds); // credits and scores are saved; lamps and the display have no listeners yet (#14)
+    audio.feed(takeAudio(game), cmds);
     if (reported < game.errorCount) {
       console.error("the game recovered from an error:", game.errors[game.errors.length - 1]);
       reported = game.errorCount;

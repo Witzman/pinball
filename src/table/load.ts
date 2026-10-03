@@ -1,7 +1,7 @@
 import { DT } from "../core/step";
 import { createWorld, makeFlipper, makePlunger, slopeGravity } from "../core/world";
 import type { Ball, Circle, Gate, Magnet, Segment, Trigger, World } from "../core/types";
-import type { KickDef, Point, TableDef } from "./schema";
+import type { KickDef, Point, SoundClass, TableDef } from "./schema";
 import { DEFAULT_KICK_COOLDOWN_MS, DEFAULT_KICK_MIN, validateTable } from "./validate";
 
 export interface LoadedTable {
@@ -21,6 +21,8 @@ export interface LoadedTable {
   ballMass: number;
   /** Height of each zone's level above the playfield, metres; index = zone. Presentation only. */
   heights: number[];
+  /** Sound class per switch name (#15); empty without `TableDef.sounds`. */
+  sounds: Record<string, SoundClass>;
   /** Drawn ramps (#21), metres. */
   ramps: { zone: number; path: { x: number; y: number }[]; width: number }[];
 }
@@ -120,7 +122,7 @@ export function loadTable(def: TableDef): LoadedTable {
     : null;
 
   const world = createWorld({ balls: [], segments, circles, gates, triggers, magnets, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg), kickWait: new Int32Array(kickers) });
-  return { world, flipperIds: def.flippers.map((f) => f.id), triggerIds: (def.triggers ?? []).map((t) => t.id), magnetIds: (def.magnets ?? []).map((m) => m.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM, heights: (def.visual?.heights ?? []).map((h) => h * MM), ramps: (def.visual?.ramps ?? []).map((r) => ({ zone: r.zone, path: r.path.map((q) => ({ x: q[0] * MM, y: q[1] * MM })), width: r.width * MM })) };
+  return { world, flipperIds: def.flippers.map((f) => f.id), triggerIds: (def.triggers ?? []).map((t) => t.id), magnetIds: (def.magnets ?? []).map((m) => m.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM, heights: (def.visual?.heights ?? []).map((h) => h * MM), sounds: { ...(def.sounds ?? {}) }, ramps: (def.visual?.ramps ?? []).map((r) => ({ zone: r.zone, path: r.path.map((q) => ({ x: q[0] * MM, y: q[1] * MM })), width: r.width * MM })) };
 }
 
 /** A resting ball at (x, y) millimetres on the playfield. */

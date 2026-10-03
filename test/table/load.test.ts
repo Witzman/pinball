@@ -30,6 +30,7 @@ describe("loadTable", () => {
   it("turns an arc into chords whose end points lie on the circle", () => {
     const def: TableDef = structuredClone(demoTable);
     def.walls = [{ type: "arc", c: [200, 300], r: 100, from: 0, to: 90, chords: 8, material: "rubber" }];
+    delete def.sounds;
     def.shots = {};
     def.posts = [];
     const w = loadTable(def).world;
@@ -48,6 +49,7 @@ describe("loadTable", () => {
   it("closes a closed polyline", () => {
     const def: TableDef = structuredClone(demoTable);
     def.walls = [{ type: "polyline", points: [[10, 10], [100, 10], [100, 100]], closed: true, material: "rubber" }];
+    delete def.sounds;
     def.shots = {};
     def.posts = [];
     expect(loadTable(def).world.segments.length).toBe(3);

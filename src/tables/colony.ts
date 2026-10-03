@@ -53,5 +53,6 @@ export const colonyTable: TableDef = {
     { id: "left", pivot: [134, 900], length: 58, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber" },
     { id: "right", pivot: [354, 900], length: 58, rBase: 9.5, rTip: 5, restDeg: 150, activeDeg: 210, upMs: 40, downMs: 100, material: "rubber" },
   ],
+  sounds: { slingL: "sling", slingR: "sling" },
   shots: { skillShot: ["skill1", "skill2", "skill3"] },
 };
