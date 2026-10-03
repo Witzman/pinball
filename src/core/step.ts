@@ -33,6 +33,7 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
     if (idx >= nSeg) {
       const c = w.circles[idx - nSeg]!;
       if ((c.zoneMask & zoneBit) === 0) continue;
+      if (c.drop !== undefined && w.down[c.drop - 1] === 1) continue; // a drop target that is down
       const t = hitCircle(b, c.x, c.y, b.r + c.r, rem);
       if (t === Infinity) continue;
       const px = b.x + b.vx * t - c.x;
@@ -43,6 +44,7 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
     }
     const s = w.segments[idx]!;
     if ((s.zoneMask & zoneBit) === 0) continue;
+    if (s.drop !== undefined && w.down[s.drop - 1] === 1) continue; // a drop target that is down
     const abx = s.bx - s.ax;
     const aby = s.by - s.ay;
     const len2 = abx * abx + aby * aby;

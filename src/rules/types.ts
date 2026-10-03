@@ -32,6 +32,10 @@ export type Command =
   /** Kicks out the ball locked in the sinkhole `lock`; an error if none is held there. */
   | { c: "releaseBall"; lock: string }
   | { c: "magnet"; id: string; on: boolean }
+  /** Puts the drop target `id` (the `ref` of its walls or posts) down or up (#50); an error for an unknown id. */
+  | { c: "dropTarget"; id: string; state: "up" | "down" }
+  /** Brings every drop target of the bank up (#50); an error for an unknown bank. */
+  | { c: "dropBank"; bank: string }
   | { c: "lockBall"; ball: number; lock: string }
   | { c: "feedBall"; feed: string }
   | { c: "dmd"; show: Cue }

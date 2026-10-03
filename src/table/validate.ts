@@ -194,6 +194,21 @@ export function validateTable(t: TableDef): string[] {
     if (!SOUND_CLASSES.includes(cls)) fail(`sounds: "${sw}" has the unknown class "${cls}"`);
   }
 
+  // drop targets (#50): a ref is a non-empty name, banks name refs that exist
+  const refs = new Set<string>();
+  const checkRef = (where: string, ref: unknown) => {
+    if (ref === undefined) return;
+    if (typeof ref !== "string" || ref === "") fail(`${where}: ref must be a non-empty string`);
+    else refs.add(ref);
+  };
+  t.walls.forEach((w, i) => checkRef(`wall #${i} (${w.type})`, w.ref));
+  t.posts.forEach((p, i) => checkRef(`post #${i}`, p.ref));
+  for (const [bank, list] of Object.entries(t.dropBanks ?? {})) {
+    if (bank === "") fail("drop bank: name must not be empty");
+    if (!Array.isArray(list) || list.length === 0) fail(`drop bank "${bank}": needs at least one drop target`);
+    else for (const r of list) if (!refs.has(r)) fail(`drop bank "${bank}": "${r}" is not the ref of any wall or post`);
+  }
+
   for (const [name, u] of users) {
     if (u.count > 1 && !u.allShared) fail(`switch "${name}" is used by ${u.count} colliders; mark all of them shared: true or rename`);
   }
