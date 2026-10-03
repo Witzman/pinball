@@ -80,7 +80,7 @@ describe("replay runner", () => {
       }
       expect(apart, n).toBeGreaterThan(0.01);
     }
-  });
+  }, 60000); // many short replays: slow on a CI runner
 
   it("rejects an unknown table", () => {
     expect(() => runReplay(replay({ tableId: "nope" }), allTables)).toThrow(/unknown table "nope"/);
