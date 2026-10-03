@@ -70,4 +70,14 @@ describe("the shipping tables' setups", () => {
     expect(g.rules.state.player.ballNo).toBe(2);
     expect(g.rules.state.game!.phase).toBe("play");
   });
+
+  it("holds the ball in the plunger lane while the plunger is pulled: the lane has a floor", () => {
+    const g = createGame(demoTable);
+    g.input.plunge = true;
+    for (let i = 0; i < 40; i++) advance(g, 50); // two seconds of pulling, more than the stroke needs
+    const b = g.table.world.balls[0]!;
+    expect(g.drains).toBe(0);
+    expect(b.y).toBeLessThan(1.05); // still on the table, squeezed against the floor, not carried below it
+    expect(b.y).toBeGreaterThan(0.95);
+  });
 });
