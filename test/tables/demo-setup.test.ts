@@ -81,19 +81,21 @@ describe("the shipping tables' setups", () => {
     expect(b.y).toBeGreaterThan(0.95);
   });
 
-  it("pushes the ball off a pop bumper of the demo table and scores 100 for it", () => {
-    const g = createGame(demoTable, tableSetups.demo!);
-    g.input.start = true;
-    advance(g, 5);
-    g.input.start = false;
-    advance(g, 5);
-    g.table.world.gravity = 0;
-    const b = g.table.world.balls[0]!;
-    Object.assign(b, { x: 0.12, y: 0.4, vx: 1, vy: 0 }); // straight at bumper1 at (200, 400) mm
-    const before = g.rules.state.player.score;
-    for (let i = 0; i < 80; i++) tick(g);
-    expect(g.rules.state.player.score).toBe(before + 100);
-    expect(b.vx).toBeLessThan(-1.9); // pushed back with the kick speed of 2 m/s
+  it("pushes the ball off each pop bumper of the demo table and scores 100 for it", () => {
+    for (const [x, y, name] of [[0.12, 0.4, "bumper1"], [0.24, 0.42, "bumper2"]] as const) {
+      const g = createGame(demoTable, tableSetups.demo!);
+      g.input.start = true;
+      advance(g, 5);
+      g.input.start = false;
+      advance(g, 5);
+      g.table.world.gravity = 0;
+      const b = g.table.world.balls[0]!;
+      Object.assign(b, { x, y, vx: 1, vy: 0 }); // straight at the bumper from the left: (200, 400) mm and (320, 420) mm
+      const before = g.rules.state.player.score;
+      for (let i = 0; i < 80; i++) tick(g);
+      expect(g.rules.state.player.score, name).toBe(before + 100);
+      expect(b.vx, name).toBeLessThan(-1.9); // pushed back with the kick speed of 2 m/s
+    }
   });
 
   it("pushes the ball off the standup target too: it comes back faster than a plain rubber wall would send it", () => {
