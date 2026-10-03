@@ -6,7 +6,22 @@ import { backglassTexture, drawDisplay, glowTexture, playfieldTexture, studioSky
 import { fitDistance } from "./frame";
 import { rampGeometry } from "./ramp";
 import rampPlasticUrl from "./assets/ramp-plastic.webp";
+import rampPlasticPhotoUrl from "./assets/ramp-plastic-photo.webp";
+import rampPlasticHyperUrl from "./assets/ramp-plastic-hyper.webp";
 import playfieldUrl from "./assets/playfield-colony.webp";
+import playfieldPhotoUrl from "./assets/playfield-colony-photo.webp";
+import playfieldHyperUrl from "./assets/playfield-colony-hyper.webp";
+
+/** The three looks of the generated art (#45), chosen by ?art=painted|photo|hyper; painted is the default. */
+const ART = {
+  painted: { playfield: playfieldUrl, ramp: rampPlasticUrl },
+  photo: { playfield: playfieldPhotoUrl, ramp: rampPlasticPhotoUrl },
+  hyper: { playfield: playfieldHyperUrl, ramp: rampPlasticHyperUrl },
+} as const;
+const artVariant = ((): (typeof ART)[keyof typeof ART] => {
+  const q = typeof location === "undefined" ? null : new URLSearchParams(location.search).get("art");
+  return q && q in ART ? ART[q as keyof typeof ART] : ART.painted;
+})();
 import type { MeshData } from "./ramp";
 
 // The PlayCanvas renderer (issue #45): the same Renderer interface as the canvas placeholder,
@@ -130,7 +145,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     m.opacity = 0.9;
     m.update();
   };
-  rampImage.src = rampPlasticUrl;
+  rampImage.src = artVariant.ramp;
   const glowTex = texture(app.graphicsDevice, glowTexture(), false);
   /** An additive glow: light on the playfield that does not hide what is under it. */
   const glowMaterial = (rgb: [number, number, number], intensity: number): pc.StandardMaterial => {
@@ -223,7 +238,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
         fieldMat.diffuseMap = t;
         fieldMat.update();
       };
-      img.src = playfieldUrl;
+      img.src = artVariant.playfield;
     }
     place(field, 0, -0.5, 0, sceneW * S, 1, sceneL * S);
     // rails: a steel wall under a chrome tube
