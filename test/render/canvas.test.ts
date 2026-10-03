@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createCanvasRenderer, drawScene, fitView } from "../../src/render/canvas";
 import { advance, createGame } from "../../src/sim/game";
 import { buildScene, snapshot } from "../../src/sim/snapshot";
+import { conformance } from "./conformance";
 import { demoTable } from "../../src/tables/demo";
 
 /** A recording stand-in for CanvasRenderingContext2D. */
@@ -214,4 +215,9 @@ describe("the canvas renderer", () => {
     r.draw(snap);
     expect(log).not.toEqual(off);
   });
+});
+
+conformance("the canvas renderer", () => {
+  const { ctx, log } = recordingCtx();
+  return { renderer: createCanvasRenderer(ctx), drew: () => log.filter((c) => !c.startsWith("setTransform")).length, reset: () => void (log.length = 0) };
 });

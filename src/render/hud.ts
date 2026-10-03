@@ -1,7 +1,7 @@
-/** The machine buttons of the touch screen, left to right, as the top band is divided (see touchZone). */
+import { MACHINE_BAND as BAND } from "../sim/layout";
+
+/** The names of the machine buttons of the touch screen, left to right, as the top band is divided (MACHINE_BUTTONS). */
 const BAND_LABELS = ["COIN", "BUY MORE", "START"] as const;
-/** Height of the touch band as a fraction of the screen; the same number as MACHINE_BAND in input. */
-const BAND = 0.12;
 
 /**
  * Draws text lines below the touch band, the first one big, and the names of the touch

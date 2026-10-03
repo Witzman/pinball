@@ -1,4 +1,5 @@
 import type { GameInput, NudgeDir } from "../sim/game";
+import { FLIPPER_HALF, MACHINE_BAND, MACHINE_BUTTONS, PLUNGE_EDGE } from "../sim/layout";
 
 const LEFT = ["ShiftLeft", "KeyZ", "ArrowLeft"];
 const RIGHT = ["ShiftRight", "Slash", "ArrowRight"];
@@ -32,8 +33,7 @@ export function applyKey(state: GameInput, code: string, down: boolean): "pause"
 
 export type Zone = "left" | "right" | "plunge" | "coin" | "buyin" | "start";
 
-/** The top band of the screen holds the machine buttons. */
-export const MACHINE_BAND = 0.12;
+export { MACHINE_BAND };
 
 /**
  * Lower half of the screen: left and right halves are the flippers, the right edge is
@@ -41,9 +41,9 @@ export const MACHINE_BAND = 0.12;
  * the upper half is free (nudge, #20).
  */
 export function touchZone(x: number, y: number, w: number, h: number): Zone | null {
-  if (y < MACHINE_BAND * h) return x < w / 3 ? "coin" : x < (2 * w) / 3 ? "buyin" : "start";
-  if (y < 0.5 * h) return null;
-  if (x >= 0.82 * w) return "plunge";
+  if (y < MACHINE_BAND * h) return x < w / 3 ? MACHINE_BUTTONS[0] : x < (2 * w) / 3 ? MACHINE_BUTTONS[1] : MACHINE_BUTTONS[2];
+  if (y < FLIPPER_HALF * h) return null;
+  if (x >= PLUNGE_EDGE * w) return "plunge";
   return x < w / 2 ? "left" : "right";
 }
 
