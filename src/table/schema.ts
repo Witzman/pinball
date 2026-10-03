@@ -172,7 +172,13 @@ export interface PlungerDef {
  */
 export interface VisualDef {
   heights?: number[];
-  ramps?: { zone: number; path: Point[]; width: number }[];
+  ramps?: {
+    zone: number;
+    path: Point[];
+    width: number;
+    /** Height of the ball level above the playfield at each path point, mm: a ramp that rises (or falls). Without it the ramp lies at the height of its zone. */
+    heights?: number[];
+  }[];
 }
 
 /** How a table can say a switch should sound (#15). */

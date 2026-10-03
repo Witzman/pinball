@@ -182,6 +182,10 @@ export function validateTable(t: TableDef): string[] {
       if (r.path.length < 2) fail(`${where}: needs at least 2 path points`);
       if (!r.path.every(inside)) fail(`${where}: outside the playfield`);
       if (!(r.width > 0 && r.width <= t.playfield.width)) fail(`${where}: width must be positive and fit the playfield`);
+      if (r.heights !== undefined) {
+        if (r.heights.length !== r.path.length) fail(`${where}: heights needs one value for each of the ${r.path.length} path points`);
+        if (!r.heights.every((h) => Number.isFinite(h) && h >= 0)) fail(`${where}: every height must be a number >= 0`);
+      }
     });
   }
 

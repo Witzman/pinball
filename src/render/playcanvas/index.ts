@@ -4,6 +4,8 @@ import { drawHud } from "../hud";
 import type { Renderer } from "../renderer";
 import { backglassTexture, drawDisplay, glowTexture, playfieldTexture, studioSky } from "./art";
 import { fitDistance } from "./frame";
+import { rampGeometry } from "./ramp";
+import type { MeshData } from "./ramp";
 
 // The PlayCanvas renderer (issue #45): the same Renderer interface as the canvas placeholder,
 // a lit 3D table behind it. World metres become centimetres here (1 unit = 1 cm), x to the
@@ -111,7 +113,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     flipperRubber: material({ diffuse: [0.85, 0.08, 0.06], metal: 0, gloss: 0.55 }),
     ball: material({ diffuse: [0.95, 0.96, 1], metal: 1, gloss: 0.98 }),
     hole: material({ diffuse: [0.02, 0.02, 0.02], metal: 0, gloss: 0.2 }),
-    plastic: material({ diffuse: [0.6, 0.8, 1], opacity: 0.3, metal: 0, gloss: 0.95 }),
+    plastic: material({ diffuse: [0.55, 0.78, 1], opacity: 0.45, metal: 0, gloss: 0.97 }),
   };
   const glowTex = texture(app.graphicsDevice, glowTexture(), false);
   /** An additive glow: light on the playfield that does not hide what is under it. */
@@ -156,6 +158,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
 
   let flipperEntities: pc.Entity[][] = [];
   const balls: pc.Entity[] = [];
+  const ballLift: number[] = []; // the drawn height of each ball: it eases toward the real one, so a drop off the end of a ramp is not a jump
   let built: pc.Entity | null = null;
 
   function build(scene: StaticScene): void {
@@ -239,18 +242,17 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
       inserts.set(t.id, { disc, glow, rgb, level: 0.25, discMat: disc.render!.meshInstances[0]!.material as pc.StandardMaterial, glowMat: glow.render!.meshInstances[0]!.material as pc.StandardMaterial });
     }
     buildCabinet(g);
-    // ramps: translucent plastic strips on the playfield, raised by their zone
+    // ramps: an inclined plastic slab with chrome rails on supports, rising along its height profile
     for (const r of scene.ramps) {
-      const hh = (scene.heights[r.zone] ?? 0.03) * S;
-      for (let i = 1; i < r.path.length; i++) {
-        const a = r.path[i - 1]!;
-        const b = r.path[i]!;
-        const ax = X(a.x);
-        const az = Z(a.y);
-        const bx = X(b.x);
-        const bz = Z(b.y);
-        const e = add(g, "box", mats.plastic, false);
-        place(e, (ax + bx) / 2, hh + 0.1, (az + bz) / 2, Math.hypot(bx - ax, bz - az), 0.2, r.width * S, (-Math.atan2(bz - az, bx - ax) * 180) / Math.PI);
+      if (r.path.length < 2) continue;
+      const path = r.path.map((q, i) => ({ x: X(q.x), y: (r.heights[i] ?? 0) * S + 0.15, z: Z(q.y) }));
+      const geo = rampGeometry(path, r.width * S, 0.35, 1.1);
+      const slab = new pc.Entity();
+      slab.addComponent("render", { meshInstances: [new pc.MeshInstance(meshOf(geo.surface), mats.plastic), new pc.MeshInstance(meshOf(geo.rails), mats.chrome)], castShadows: true, receiveShadows: true });
+      g.addChild(slab);
+      for (const sp of geo.supports) {
+        const leg = add(g, "cylinder", mats.chrome);
+        place(leg, sp.x, sp.y / 2, sp.z, 0.7, Math.max(0.1, sp.y), 0.7);
       }
     }
   }
@@ -331,6 +333,15 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     return mesh;
   }
 
+  function meshOf(m: MeshData): pc.Mesh {
+    const mesh = new pc.Mesh(app.graphicsDevice);
+    mesh.setPositions(m.positions);
+    mesh.setNormals(m.normals);
+    mesh.setIndices(m.indices);
+    mesh.update();
+    return mesh;
+  }
+
   function flipperParts(i: number, f: FlipperView): pc.Entity[] {
     let parts = flipperEntities[i];
     if (!parts) {
@@ -396,7 +407,12 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
       balls.forEach((e, i) => {
         const b = snap.balls[i];
         e.enabled = b !== undefined;
-        if (b) place(e, X(b.x), b.r * S + b.z * S, Z(b.y), b.r * S * 2, b.r * S * 2, b.r * S * 2);
+        if (b) {
+          const target = b.z * S;
+          const lift = ballLift[i] === undefined ? target : ballLift[i]! + (target - ballLift[i]!) * 0.35;
+          ballLift[i] = lift;
+          place(e, X(b.x), b.r * S + lift, Z(b.y), b.r * S * 2, b.r * S * 2, b.r * S * 2);
+        }
       });
       for (const [id, ins] of inserts) {
         const lamp = snap.lamps[id] ?? "off";
