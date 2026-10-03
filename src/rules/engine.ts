@@ -303,11 +303,18 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
           }
         },
         awardBonus() {
-          const total = table.bonus ? table.bonus(ctx) : 0;
-          if (total !== 0) ctx.addScore(total);
-          out.push({ c: "dmd", show: { id: "bonus", args: { total } } });
-          for (const [label, value] of table.bonusParts ? table.bonusParts(ctx) : []) out.push({ c: "dmd", show: { id: "bonusPart", args: { label, value } } });
-          return total;
+          // the table's bonus functions only read: no starting modes or feeding balls from them
+          resetting = true;
+          try {
+            const total = table.bonus ? table.bonus(ctx) : 0;
+            const parts = table.bonusParts ? table.bonusParts(ctx) : [];
+            if (total !== 0) ctx.addScore(total);
+            out.push({ c: "dmd", show: { id: "bonus", args: { total } } });
+            for (const [label, value] of parts) out.push({ c: "dmd", show: { id: "bonusPart", args: { label, value } } });
+            return total;
+          } finally {
+            resetting = false;
+          }
         },
         now: () => ctx.now,
         feed: () => ctx.ball.feed(),

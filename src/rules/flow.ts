@@ -132,7 +132,7 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
   const endBall = (): void => {
     const g = game();
     const b = host.state.balls;
-    if (b.saver.until > host.now()) {
+    if (!g.tilted && b.saver.until > host.now()) { // a tilted ball is not served again
       b.saver.until = 0;
       host.emit({ c: "dmd", show: { id: "shootAgain" } });
       host.feed(); // the same ball again, nothing on the table touched
@@ -140,8 +140,8 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
     }
     host.stopPlay();
     g.phase = "bonus";
+    host.setTimer(BONUS, cfg.bonusTicks); // first: a bonus function that throws must not leave the game without its way on
     if (!g.tilted) host.awardBonus();
-    host.setTimer(BONUS, cfg.bonusTicks);
   };
 
   /** The bonus is shown: an extra ball, the next ball, or the end. */
@@ -200,6 +200,7 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
       return true;
     },
     saver(ticks) {
+      game().saverWait = false; // started by hand: the ball's first switch does not start it again
       host.state.balls.saver.until = host.now() + ticks;
     },
     phase: () => game().phase,

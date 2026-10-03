@@ -225,6 +225,45 @@ describe("ball saver", () => {
   });
 });
 
+describe("ball end edge cases", () => {
+  it("does not serve a tilted ball again, even inside the saver window", () => {
+    const h = game();
+    h.at(100).hit("loop").run(101);
+    h.state.game!.tilted = true; // test setup: #20 sets it
+    drain(h, 150);
+    expect(h.state.game!.phase).toBe("bonus");
+  });
+
+  it("goes on to the next ball even when the bonus function throws", () => {
+    const rules = createRules({ modes: {}, bonus: () => { throw new Error("boom"); } }, { seed: 1, flow: { ...cfg, saverTicks: 0 } });
+    const sw = (tick: number, t: "start" | "plunger"): never => (t === "start" ? { t: "button", tick, button: "start", down: true } : { t: "ballAtPlunger", tick }) as never;
+    rules.step(1, [sw(1, "start")], []);
+    rules.step(2, [sw(2, "plunger")], []);
+    expect(() => rules.step(3, [{ t: "drain", tick: 3, ball: 0 }], [])).toThrow(/boom/);
+    expect(rules.state.game!.phase).toBe("bonus");
+    expect(rules.state.timers["flow.bonus"]).toBeDefined(); // the way on is there
+    rules.step(3 + 200, [], []);
+    expect(rules.state.game!.phase).toBe("play");
+    expect(rules.state.player.ballNo).toBe(2);
+  });
+
+  it("does not let the bonus function start modes or feed balls", () => {
+    const run = (fn: (c: Parameters<NonNullable<TableRules["bonus"]>>[0]) => void) => () => {
+      const h = harness({ modes: { m: { start: "p", phases: { p: {} } } }, bonus: (c) => { fn(c); return 0; } }, { flow: { ...cfg, saverTicks: 0 } });
+      h.at(1).button("start", true).at(2).ballAtPlunger().at(3).drain().run(4);
+    };
+    expect(run((c) => c.start("m"))).toThrow(/while the game flow clears the table/);
+    expect(run((c) => c.ball.feed())).toThrow(/while the game flow clears the table/);
+  });
+
+  it("does not let the first switch start a saver the table already started by hand", () => {
+    const h = game();
+    h.at(10).hit("saver").at(20).hit("loop").run(21);
+    expect(h.state.game!.saverWait).toBe(false);
+    expect(h.state.balls.saver.until).toBe(510); // from the table's call at tick 10, not from the switch at 20
+  });
+});
+
 describe("extra balls", () => {
   it("awards one, refuses the next, and tells the display", () => {
     const h = harness({ modes: {}, onSwitch: (c) => c.add("got", c.game.extraBall() ? 1 : 0) }, { flow: cfg });

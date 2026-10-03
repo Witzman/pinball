@@ -205,6 +205,68 @@ describe("saver and bonus in the game loop", () => {
   });
 });
 
+describe("saver, extra ball and bonus under random play", () => {
+  const rich: FlowConfig = { ...flow, saverTicks: 150, bonusTicks: 20, extraBallMax: 1 };
+  // every ball starts with the saver on and the first ball of a game earns an extra ball
+  const generous: TableRules = {
+    modes: {},
+    onBallStart(c) {
+      c.game.saver(150);
+      if (c.count("seen") === 0) c.game.extraBall();
+      c.add("seen");
+    },
+    bonus: (c) => 100 + c.count("seen"),
+  };
+
+  it("serves exactly as many balls as saves, extra balls and ball numbers say, and never loses or invents one", () => {
+    const broken: string[] = [];
+    let saved = 0;
+    let extras = 0;
+    let finished = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const rnd = lcg(seed + 100);
+      const g = createGame(demoTable, { rules: generous, flow: rich, seed });
+      let before = g.rules.state.game!.phase;
+      let drainsAtStart = 0;
+      let savesInGame = 0;
+      let extrasInGame = 0;
+      for (let t = 0; t < 4000; t++) {
+        const r = rnd();
+        if (r < 0.006) g.input.coin = !g.input.coin;
+        else if (r < 0.012) g.input.start = !g.input.start;
+        else if (r < 0.03 && g.table.world.balls.length > 0) g.table.world.balls[0]!.y = 1.2;
+        tick(g);
+        const here = `seed ${seed} tick ${t}`;
+        const b = g.rules.state.balls;
+        const locked = Object.values(b.locked).reduce((a, n) => a + n, 0);
+        const phase = g.rules.state.game!.phase;
+        if (g.table.world.balls.length !== b.inPlay + b.toFeed + locked) broken.push(`${here}: balls on the table and in the rules differ`);
+        if (phase !== "play" && g.table.world.balls.length !== 0) broken.push(`${here}: balls on the table in phase ${phase}`);
+        if (g.rules.state.player.ballNo > 3) broken.push(`${here}: ball number ${g.rules.state.player.ballNo}`);
+        if (before === "attract" && phase === "play") {
+          drainsAtStart = g.drains;
+          savesInGame = 0;
+          extrasInGame = 0;
+        }
+        before = phase;
+        for (const c of takeCommands(g)) {
+          if (c.c === "dmd" && c.show.id === "shootAgain") { saved++; savesInGame++; }
+          if (c.c === "dmd" && c.show.id === "extraBall") { extras++; extrasInGame++; }
+          if (c.c === "gameOver") {
+            finished++;
+            const expected = 3 + savesInGame + extrasInGame;
+            if (g.drains - drainsAtStart !== expected) broken.push(`${here}: ${g.drains - drainsAtStart} drains, expected ${expected} (3 balls, ${savesInGame} saves, ${extrasInGame} extra)`);
+          }
+        }
+      }
+    }
+    expect(broken.slice(0, 5)).toEqual([]);
+    expect(saved).toBeGreaterThan(10);
+    expect(extras).toBeGreaterThan(3);
+    expect(finished).toBeGreaterThan(3);
+  }, 30000);
+});
+
 describe("a game in a replay", () => {
   const replay = (): Replay => ({
     header: { format: 1, tableId: "demo", dt: 0.001, seed: 4, ticks: 3000 },

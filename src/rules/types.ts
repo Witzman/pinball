@@ -136,7 +136,7 @@ export interface Ctx {
     phase(): GameState["phase"];
     /** Awards an extra ball, served after this ball's bonus. False when none is left or no ball is being played. */
     extraBall(): boolean;
-    /** The ball saver runs for `ticks` from now: a drain of the last ball in that time serves it again. */
+    /** The ball saver runs for `ticks` from now: a drain of the last ball in that time serves it again (with a flow only). */
     saver(ticks: number): void;
   };
   emit(cmd: Command): void;
