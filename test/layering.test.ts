@@ -13,6 +13,7 @@ const ALLOWED: Record<string, string[]> = {
   sim: ["core", "table", "rules", "sim"],
   input: ["input", "sim"],
   render: ["core", "table", "sim", "render"],
+  storage: ["storage"],
 };
 
 const root = fileURLToPath(new URL("../src", import.meta.url));
@@ -26,6 +27,29 @@ function files(dir: string): string[] {
 function strip(code: string): string {
   return code.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
 }
+
+describe("storage", () => {
+  // Decision in #11: all storage goes through one interface, so a server can replace localStorage later.
+  it("is touched by name only inside src/storage", () => {
+    for (const f of files(root)) {
+      const rel = f.slice(root.length + 1);
+      if (rel.startsWith("storage")) continue;
+      expect(strip(readFileSync(f, "utf8")), rel).not.toMatch(/localStorage|sessionStorage|indexedDB/);
+    }
+  });
+
+  it("is imported only by the app", () => {
+    for (const f of files(root)) {
+      const rel = f.slice(root.length + 1);
+      const top = rel.split(/[\\/]/)[0]!;
+      if (top === "app" || top === "storage") continue;
+      for (const m of strip(readFileSync(f, "utf8")).matchAll(/from\s+"(\.[^"]+)"/g)) {
+        const target = join(f, "..", m[1]!).slice(root.length + 1).split(/[\\/]/)[0]!;
+        expect(target, `${rel} imports ${m[1]}`).not.toBe("storage");
+      }
+    }
+  });
+});
 
 describe("layering", () => {
   for (const [layer, allowed] of Object.entries(ALLOWED)) {

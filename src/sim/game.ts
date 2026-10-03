@@ -2,7 +2,9 @@ import type { Ball } from "../core/types";
 import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_TRIGGER } from "../core/types";
 import { kickHeld, step } from "../core/step";
 import { createRules, freePlay } from "../rules";
-import type { Command, FlowConfig, Machine, Rules, RulesEvent, TableRules } from "../rules";
+import type { Command, Machine, Rules, RulesEvent, TableSetup } from "../rules";
+
+export type { TableSetup } from "../rules";
 import { loadTable, makeBall } from "../table/load";
 import type { LoadedTable } from "../table/load";
 import type { TableDef } from "../table/schema";
@@ -27,6 +29,12 @@ export interface Game {
   /** Balls lost down the drain (placeholder until ball flow, #11). */
   drains: number;
   rules: Rules;
+  /** What `recover` needs to start the rules over. */
+  setup: { def: TableDef; options: GameOptions };
+  /** Messages of the last few errors the loop recovered from, oldest first. */
+  errors: string[];
+  /** How many errors the loop has recovered from in all. */
+  errorCount: number;
   /** Commands the rules gave since the leaves last took them (`takeCommands`). */
   outbox: Command[];
   /** Buttons as the rules last heard of them, to find the edges. */
@@ -37,14 +45,6 @@ export interface Game {
   events: RulesEvent[];
   cmds: Command[];
   drained: number[];
-}
-
-/** What a table brings to a game besides its geometry. */
-export interface TableSetup {
-  /** The table's rules; free play (a drained ball is replaced at once) if absent. */
-  rules?: TableRules;
-  /** Run it as a game: credits, balls per game, game over. No flow = no game, a ball on the plunger from the start. */
-  flow?: FlowConfig;
 }
 
 export interface GameOptions extends TableSetup {
@@ -72,7 +72,7 @@ export function createGame(def: TableDef, opts: GameOptions = {}): Game {
   const idle = (): GameInput => ({ left: false, right: false, plunge: false, coin: false, start: false, buyin: false });
   const g: Game = {
     table, input: idle(), paused: false, accMs: 0, drains: 0,
-    rules, outbox: [], pressed: idle(), arrivals: 0, events: [], cmds: [], drained: [],
+    rules, setup: { def, options: opts }, errors: [], errorCount: 0, outbox: [], pressed: idle(), arrivals: 0, events: [], cmds: [], drained: [],
   };
   if (!opts.flow) {
     // free play: a ball waits on the plunger. With a flow the first ball comes when a game starts.
@@ -202,12 +202,57 @@ export function takeCommands(g: Game): Command[] {
   return taken;
 }
 
-/** Runs the physics for `dtMs` of real time, in whole ticks; the remainder carries over. */
+/** The most error messages a game keeps. */
+const MAX_ERRORS = 10;
+
+/**
+ * A tick threw, so the game is in a state nobody can reason about (a tick that stops
+ * half way leaves balls and counts out of step): start the rules over, keep what the
+ * machine remembers (credits, scores), take the balls off the table and tell the
+ * leaves. Back in attract with a flow; a fresh ball on the plunger without one.
+ */
+export function recover(g: Game, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  g.errorCount += 1;
+  g.errors.push(message);
+  if (g.errors.length > MAX_ERRORS) g.errors.shift();
+  const { def, options } = g.setup;
+  const old = g.rules.state.game;
+  const machine = old ? { credits: old.credits, boards: { main: [...old.board.main], bought: [...old.board.bought] } } : undefined;
+  const w = g.table.world;
+  w.balls.length = 0;
+  for (const m of w.magnets) m.on = false;
+  g.rules = createRules(options.rules ?? (options.flow ? { modes: {} } : freePlay), {
+    seed: options.seed ?? 1,
+    shots: def.shots,
+    ...(options.flow ? { flow: options.flow } : {}),
+    ...(machine ? { machine } : {}),
+  });
+  g.pressed = { left: false, right: false, plunge: false, coin: false, start: false, buyin: false };
+  g.events.length = 0;
+  g.cmds.length = 0;
+  g.drained.length = 0;
+  g.arrivals = 0;
+  if (!options.flow) {
+    w.balls.push(newBall(g));
+    g.arrivals = 1;
+  }
+  g.outbox.push({ c: "dmd", show: { id: "error", args: { message } } });
+}
+
+/**
+ * Runs the physics for `dtMs` of real time, in whole ticks; the remainder carries
+ * over. A tick that throws is recovered from (see `recover`) instead of ending the loop.
+ */
 export function advance(g: Game, dtMs: number): void {
   if (g.paused) return;
   g.accMs += Math.min(dtMs, MAX_FRAME_MS);
   while (g.accMs >= TICK_MS) {
-    tick(g);
+    try {
+      tick(g);
+    } catch (e) {
+      recover(g, e);
+    }
     g.accMs -= TICK_MS;
   }
 }
