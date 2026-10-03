@@ -5,7 +5,7 @@ import { createWorld, makeFlipper } from "../../src/core/world";
 export const BALL_R = 0.01350; // 27 mm ball
 
 export function ball(over: Partial<Ball> = {}): Ball {
-  return { x: 0, y: 0, vx: 0, vy: 0, w: 0, r: BALL_R, m: 0.08, zone: 0, ...over };
+  return { x: 0, y: 0, vx: 0, vy: 0, w: 0, r: BALL_R, m: 0.08, zone: 0, hold: 0, ...over };
 }
 
 export function wall(ax: number, ay: number, bx: number, by: number, over: Partial<Segment> = {}): Segment {

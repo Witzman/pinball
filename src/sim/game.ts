@@ -1,5 +1,5 @@
 import type { Ball } from "../core/types";
-import { step } from "../core/step";
+import { kickHeld, step } from "../core/step";
 import { loadTable, makeBall } from "../table/load";
 import type { LoadedTable } from "../table/load";
 import type { TableDef } from "../table/schema";
@@ -42,6 +42,13 @@ function newBall(g: Game): Ball {
   const cy = p.y - p.diry * p.pos;
   const gap = g.table.ballRadius + 1e-4;
   return { ...makeBall(g.table, 0, 0), x: cx + p.dirx * gap, y: cy + p.diry * gap };
+}
+
+/** Sends the ball held in the sinkhole `id` out. Returns whether a ball was held. */
+export function kickTrigger(g: Game, id: string): boolean {
+  const ti = g.table.triggerIds.indexOf(id);
+  if (ti < 0) throw new Error(`unknown trigger "${id}"`);
+  return kickHeld(g.table.world, ti) >= 0;
 }
 
 export function setPaused(g: Game, paused: boolean): void {

@@ -76,6 +76,14 @@ export function drawScene(ctx: CanvasRenderingContext2D, cw: number, ch: number,
     ctx.fill();
   }
 
+  ctx.lineWidth = Math.max(1, 0.002 * v.scale);
+  for (const t of w.triggers) {
+    ctx.strokeStyle = t.hold ? "#7ee787" : "#ffd866";
+    ctx.beginPath();
+    ctx.arc(X(t.x), Y(t.y), t.r * v.scale, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   const p = snap.plunger;
   if (p) {
     const cx = p.x - p.dirx * p.pos;

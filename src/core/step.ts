@@ -4,7 +4,7 @@ import { hitFlipper, pushOutFlipper } from "./flipper";
 import { advancePlunger, hitPlunger } from "./plunger";
 import { hitCircle, setHit } from "./sweep";
 import type { Hit } from "./sweep";
-import { CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT } from "./types";
+import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_TRIGGER } from "./types";
 import type { Ball, World } from "./types";
 
 /** The fixed physics step in seconds. Part of the replay header. */
@@ -140,6 +140,59 @@ function crossGates(w: World, b: Ball, bi: number, x0: number, y0: number): void
   }
 }
 
+/** Rollovers and sinkholes for a ball that moved from (x0, y0) to where it is now. */
+function enterTriggers(w: World, b: Ball, bi: number, x0: number, y0: number): void {
+  const dx = b.x - x0;
+  const dy = b.y - y0;
+  const len2 = dx * dx + dy * dy;
+  const zoneBit = 1 << b.zone;
+  for (let i = 0; i < w.triggers.length; i++) {
+    const t = w.triggers[i]!;
+    if ((t.zoneMask & zoneBit) === 0) continue;
+    const r2 = t.r * t.r;
+    const sx = x0 - t.x;
+    const sy = y0 - t.y;
+    if (sx * sx + sy * sy <= r2) continue; // it started inside: not an entry
+    // closest approach of the path of this tick to the centre
+    let f = len2 > 0 ? -(sx * dx + sy * dy) / len2 : 0;
+    f = f < 0 ? 0 : f > 1 ? 1 : f;
+    const px = sx + dx * f;
+    const py = sy + dy * f;
+    if (px * px + py * py > r2) continue;
+    if (t.hold) {
+      let taken = false;
+      for (let k = 0; k < w.balls.length; k++) if (w.balls[k]!.hold === i + 1) taken = true;
+      if (taken) continue; // the sinkhole is full: the ball rolls over it
+      b.x = t.x;
+      b.y = t.y;
+      b.vx = 0;
+      b.vy = 0;
+      b.w = 0;
+      b.hold = i + 1;
+      if (t.sw > 0) record(w, bi, t.sw, 0, CONTACT_CAPTURE);
+    } else if (t.sw > 0) {
+      record(w, bi, t.sw, 0, CONTACT_TRIGGER);
+    }
+    if (b.hold !== 0) return;
+  }
+}
+
+/** Sends the ball held in sinkhole `ti` out along its kick direction. Returns the ball's index, or -1 if none was held. */
+export function kickHeld(w: World, ti: number): number {
+  const t = w.triggers[ti];
+  if (!t) return -1;
+  for (let bi = 0; bi < w.balls.length; bi++) {
+    const b = w.balls[bi]!;
+    if (b.hold === ti + 1) {
+      b.hold = 0;
+      b.vx = t.kickx * t.kickSpeed;
+      b.vy = t.kicky * t.kickSpeed;
+      return bi;
+    }
+  }
+  return -1;
+}
+
 export function step(w: World): void {
   const out = w.contacts;
   out.n = 0;
@@ -150,6 +203,7 @@ export function step(w: World): void {
   if (w.plunger) advancePlunger(w.plunger, DT);
   for (let bi = 0; bi < w.balls.length; bi++) {
     const b = w.balls[bi]!;
+    if (b.hold !== 0) continue; // held in a sinkhole
     for (const f of w.flippers) pushOutFlipper(f, b);
     b.vy += w.gravity * DT;
     b.vx *= 1 - w.drag * DT;
@@ -173,6 +227,7 @@ export function step(w: World): void {
       if (rem <= 0) break;
     }
     crossGates(w, b, bi, x0, y0);
+    enterTriggers(w, b, bi, x0, y0);
   }
   w.tick += 1;
 }

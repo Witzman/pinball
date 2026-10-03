@@ -12,6 +12,8 @@ export interface Ball {
   m: number;
   /** Height zone: 0 playfield, 1+ ramp or habitrail. */
   zone: number;
+  /** 0 = free; i + 1 = held in the sinkhole `triggers[i]` and not simulated until kicked out. */
+  hold: number;
 }
 
 export interface Segment {
@@ -132,10 +134,33 @@ export interface Gate {
   sw: number;
 }
 
+/**
+ * A round trigger area. A ball whose centre enters it (in a matching zone) is
+ * reported on `sw`. A `hold` trigger is a sinkhole: it also captures the ball at
+ * its centre and keeps it there until `kickHeld` sends it out.
+ */
+export interface Trigger {
+  x: number;
+  y: number;
+  r: number;
+  zoneMask: number;
+  /** Switch id reported on entry; 0 = none. */
+  sw: number;
+  hold: boolean;
+  /** Unit direction and speed (m/s) of the kick-out. */
+  kickx: number;
+  kicky: number;
+  kickSpeed: number;
+}
+
 /** What a contact record means. */
 export const CONTACT_HIT = 0;
 export const CONTACT_GATE_AB = 1;
 export const CONTACT_GATE_BA = 2;
+/** A ball entered a rollover trigger. */
+export const CONTACT_TRIGGER = 3;
+/** A ball was captured by a sinkhole. */
+export const CONTACT_CAPTURE = 4;
 
 /** Events on switches, in the order they happened. Cleared every step. */
 export interface ContactBuffer {
@@ -145,7 +170,7 @@ export interface ContactBuffer {
   sw: Int32Array;
   /** Normal impulse in N*s; 0 for events that are not collisions. */
   impulse: Float64Array;
-  /** CONTACT_HIT, CONTACT_GATE_AB or CONTACT_GATE_BA. */
+  /** One of the CONTACT_* kinds. */
   kind: Uint8Array;
 }
 
@@ -170,6 +195,7 @@ export interface World {
   segments: Segment[];
   circles: Circle[];
   gates: Gate[];
+  triggers: Trigger[];
   flippers: Flipper[];
   plunger: Plunger | null;
   /** Effective gravity along +y, m/s^2 (already projected for the slope). */

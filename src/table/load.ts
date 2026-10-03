@@ -1,5 +1,5 @@
 import { createWorld, makeFlipper, makePlunger, slopeGravity } from "../core/world";
-import type { Ball, Circle, Gate, Segment, World } from "../core/types";
+import type { Ball, Circle, Gate, Segment, Trigger, World } from "../core/types";
 import type { Point, TableDef } from "./schema";
 import { validateTable } from "./validate";
 
@@ -7,6 +7,8 @@ export interface LoadedTable {
   world: World;
   /** Flipper ids in the order of world.flippers. */
   flipperIds: string[];
+  /** Trigger ids in the order of world.triggers. */
+  triggerIds: string[];
   /** Switch names; a collider's `sw` is the 1-based index into this list. */
   switchNames: string[];
   /** Playfield size, metres. */
@@ -73,6 +75,14 @@ export function loadTable(def: TableDef): LoadedTable {
     ax: g.a[0] * MM, ay: g.a[1] * MM, bx: g.b[0] * MM, by: g.b[1] * MM, zoneA: g.zoneA, zoneB: g.zoneB, sw: swId(g.switch),
   }));
 
+  const triggers: Trigger[] = (def.triggers ?? []).map((t) => {
+    const a = ((t.hold?.kickDeg ?? 0) * Math.PI) / 180;
+    return {
+      x: t.at[0] * MM, y: t.at[1] * MM, r: t.r * MM, zoneMask: zoneMask(t.zones), sw: swId(t.switch), hold: t.hold !== undefined,
+      kickx: Math.cos(a), kicky: Math.sin(a), kickSpeed: t.hold?.kickSpeed ?? 0,
+    };
+  });
+
   const flippers = def.flippers.map((f) => {
     const mat = def.materials[f.material]!;
     return makeFlipper({
@@ -92,11 +102,11 @@ export function loadTable(def: TableDef): LoadedTable {
       })
     : null;
 
-  const world = createWorld({ balls: [], segments, circles, gates, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg) });
-  return { world, flipperIds: def.flippers.map((f) => f.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM };
+  const world = createWorld({ balls: [], segments, circles, gates, triggers, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg) });
+  return { world, flipperIds: def.flippers.map((f) => f.id), triggerIds: (def.triggers ?? []).map((t) => t.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM };
 }
 
 /** A resting ball at (x, y) millimetres on the playfield. */
 export function makeBall(t: LoadedTable, xMm: number, yMm: number): Ball {
-  return { x: xMm * MM, y: yMm * MM, vx: 0, vy: 0, w: 0, r: t.ballRadius, m: t.ballMass, zone: 0 };
+  return { x: xMm * MM, y: yMm * MM, vx: 0, vy: 0, w: 0, r: t.ballRadius, m: t.ballMass, zone: 0, hold: 0 };
 }
