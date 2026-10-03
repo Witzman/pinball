@@ -1,0 +1,21 @@
+// The scoring scale of The Colony (issue #46):
+// a good player reaches a replay credit at about a billion points in one game; a skill shot
+// is a million, a super skill shot ten million. Everything else is a placeholder that gets
+// its place on that scale as the missions of #29 to #41 arrive.
+
+export const REPLAY_SCORE = 1_000_000_000;
+export const SKILL_SHOT = 1_000_000;
+export const SUPER_SKILL_SHOT = 10_000_000;
+
+/** Points for the small things of the outline; placeholders, far below the scale of a mission. */
+export const SWITCH_POINTS: Record<string, number> = {
+  slingL: 10_000,
+  slingR: 10_000,
+  inL: 25_000,
+  inR: 25_000,
+  outL: 5_000,
+  outR: 5_000,
+};
+
+/** Biggest score a table may use: JS numbers are exact up to 2^53, the HUD groups the digits. */
+export const MAX_SCORE = Number.MAX_SAFE_INTEGER;
