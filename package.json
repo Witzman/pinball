@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "budget": "node tools/check_budget.mjs",
-    "bench": "vitest run test/core/perf.test.ts --disable-console-intercept"
+    "bench": "vitest run test/core/perf.test.ts --disable-console-intercept",
+    "golden:update": "node tools/golden-update.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

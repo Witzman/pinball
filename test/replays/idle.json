@@ -1,0 +1,10 @@
+{
+  "header": {
+    "format": 1,
+    "tableId": "demo",
+    "dt": 0.001,
+    "seed": 1,
+    "ticks": 3000
+  },
+  "inputs": []
+}
