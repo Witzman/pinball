@@ -215,7 +215,7 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
         if (n === 1) delete b.locked[lockId];
         else b.locked[lockId] = n - 1;
         b.inPlay += 1;
-        out.push({ c: "fireSolenoid", id: lockId });
+        out.push({ c: "releaseBall", lock: lockId });
       },
       feed() {
         const b = state.balls;
@@ -300,8 +300,10 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
 
   const dispatch = (e: RulesEvent): void => {
     const b = state.balls;
-    if (e.t === "drain") b.inPlay = Math.max(0, b.inPlay - 1);
-    else if (e.t === "ballAtPlunger") {
+    if (e.t === "drain") {
+      if (b.inPlay < 1) throw new Error("a ball drained but no ball is in play: the ball accounting is off");
+      b.inPlay -= 1;
+    } else if (e.t === "ballAtPlunger") {
       if (b.inPlay + 1 > b.capacity) throw new Error(`a ball arrived at the plunger but ${b.capacity} ball(s) are already in play`);
       b.inPlay += 1;
       b.toFeed = Math.max(0, b.toFeed - 1);

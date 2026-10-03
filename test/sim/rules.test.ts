@@ -1,19 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { advance, createGame, takeCommands, tick } from "../../src/sim/game";
 import { runReplay } from "../../src/sim/replay";
-import type { Replay } from "../../src/sim/replay";
 import { hashRules } from "../../src/rules";
 import type { Command, RulesEvent, TableRules } from "../../src/rules";
-import { demoTable } from "../../src/tables/demo";
 import type { TableDef } from "../../src/table/schema";
-
-/** The demo table with a sinkhole in the plunger lane, right in the path of a launched ball. */
-const saucerTable: TableDef = {
-  ...structuredClone(demoTable),
-  id: "saucer-demo",
-  triggers: [{ id: "saucer", at: [499, 700], r: 8, switch: "saucer_sw", hold: { kickDeg: -90, kickSpeed: 2 } }],
-  magnets: [{ id: "pull", at: [250, 600], r: 60, strength: 8 }],
-};
+import { demoTable } from "../../src/tables/demo";
+import { saucerReplay, saucerRules, saucerTable } from "./fixtures";
 
 /** Records every event; the rest of the table is free play. */
 function recorder(log: RulesEvent[]): TableRules {
@@ -100,9 +92,11 @@ describe("rules in the game loop", () => {
   it("removes only the drained balls and keeps the others", () => {
     const g = createGame(demoTable);
     run(g, 3);
-    g.rules.state.balls.capacity = 3;
+    g.rules.state.balls.capacity = 3; // test setup: the engine insists on the capacity, the rules do not raise it yet
     const w = g.table.world;
     w.balls.push({ ...w.balls[0]!, x: 0.2, y: 0.3 }, { ...w.balls[0]!, x: 0.3, y: 0.3 });
+    g.arrivals = 2;
+    tick(g); // the rules hear of the two new balls
     w.balls[0]!.y = 1.2;
     w.balls[2]!.y = 1.3;
     tick(g);
@@ -150,18 +144,64 @@ describe("commands that reach the physics", () => {
     expect(bad({ c: "fireSolenoid", id: "nope" })).toThrow(/unknown trigger "nope"/);
   });
 
-  it("refuses to lock a ball that is not held in a sinkhole", () => {
-    const rules: TableRules = { modes: {}, onSwitch: (c) => c.ball.lock("saucer"), onDrain: (c) => c.ball.feed() };
-    const g = createGame(demoTable, { rules });
-    const log: RulesEvent[] = [];
-    run(g, 2);
+  it("refuses to lock a ball that is not the one held in that sinkhole, or a lock that is no sinkhole", () => {
+    const hitTarget = (lock: string) => () => {
+      const rules: TableRules = { modes: {}, onSwitch: (c, e) => { if (e.sw === "target1") c.ball.lock(lock); }, onDrain: (c) => c.ball.feed() };
+      const g = createGame(saucerTable, { rules });
+      run(g, 2);
+      g.table.world.gravity = 0;
+      const b = g.table.world.balls[0]!;
+      b.x = 0.34;
+      b.y = 0.55;
+      b.vy = -3; // into the standup target
+      run(g, 100);
+    };
+    expect(hitTarget("saucer")).toThrow(/ball 0 is not the ball held in that sinkhole/);
+    expect(hitTarget("nowhere")).toThrow(/"nowhere" is not a sinkhole of this table/);
+  });
+
+  it("refuses to lock a ball under the id of a different sinkhole than the one that holds it", () => {
+    const twoSinkholes: TableDef = {
+      ...saucerTable,
+      triggers: [...saucerTable.triggers!, { id: "other", at: [200, 400], r: 8, switch: "other_sw", hold: { kickDeg: -90, kickSpeed: 2 } }],
+    };
+    const rules: TableRules = { modes: {}, onSwitch: (c, e) => { if (e.kind === "capture") c.ball.lock("other"); } };
+    const g = createGame(twoSinkholes, { rules });
+    run(g, 300);
+    g.input.plunge = true;
+    run(g, 400);
+    g.input.plunge = false;
+    expect(() => run(g, 1500)).toThrow(/lockBall "other": ball 0 is not the ball held in that sinkhole/);
+  });
+
+  it("gives lockBall the right ball when another ball drains in the same tick", () => {
+    const rules: TableRules = { modes: {}, onSwitch: (c, e) => { if (e.kind === "capture") c.ball.lock("saucer"); } };
+    const g = createGame(saucerTable, { rules });
+    g.rules.state.balls.capacity = 2; // test setup
+    const w = g.table.world;
+    w.balls.push({ ...w.balls[0]!, x: 0.499, y: 0.9, vx: 0, vy: 0 });
     g.table.world.gravity = 0;
-    const b = g.table.world.balls[0]!;
-    b.x = 0.34;
-    b.y = 0.55;
-    b.vy = -3;
-    expect(() => run(g, 100)).toThrow(/ball 0 is not held in a sinkhole/);
-    expect(log).toEqual([]);
+    g.arrivals = 2;
+    tick(g); // the rules hear of both balls
+    w.balls[0]!.y = 1.2; // ball 0 drains in the very tick ball 1 drops into the sinkhole
+    w.balls[1]!.y = 0.7085;
+    w.balls[1]!.vy = -1;
+    tick(g);
+    expect(w.balls).toHaveLength(1);
+    expect(w.balls[0]!.hold).toBe(1);
+    expect(g.rules.state.balls).toMatchObject({ inPlay: 0, locked: { saucer: 1 } });
+  });
+
+  it("refuses to release when no ball is held in the sinkhole", () => {
+    const rules: TableRules = { modes: {}, onBallStart: (c) => c.after("t", 5), onTimer: (c) => c.emit({ c: "releaseBall", lock: "saucer" }) };
+    expect(() => run(createGame(saucerTable, { rules }), 20)).toThrow(/releaseBall "saucer": no ball is held in that sinkhole/);
+  });
+
+  it("lets a fireSolenoid kick an empty sinkhole without complaint", () => {
+    const rules: TableRules = { modes: {}, onBallStart: (c) => c.after("t", 5), onTimer: (c) => c.emit({ c: "fireSolenoid", id: "saucer" }) };
+    const g = createGame(saucerTable, { rules });
+    run(g, 20);
+    expect(takeCommands(g)).toContainEqual({ c: "fireSolenoid", id: "saucer" });
   });
 
   it("captures a launched ball in a sinkhole, holds it while the rules wait, then releases it with a kick", () => {
@@ -201,57 +241,39 @@ describe("commands that reach the physics", () => {
     expect(g.rules.state.tick - heldAt).toBe(300); // released by the timer, 300 ticks after the capture
     expect(g.rules.state.balls).toMatchObject({ inPlay: 1, locked: {} });
     expect(b().vy).toBeLessThan(-1); // kicked up the lane
-    expect(takeCommands(g).map((c) => c.c)).toEqual(expect.arrayContaining(["lockBall", "fireSolenoid"]));
+    expect(takeCommands(g).map((c) => c.c)).toEqual(expect.arrayContaining(["lockBall", "releaseBall"]));
   });
 });
 
 describe("replays with rules", () => {
-  const saucerRules: TableRules = {
-    modes: {},
-    onSwitch(c, e) {
-      if (e.kind === "capture") {
-        c.ball.lock("saucer");
-        c.after("free", 300);
-        c.add("roll", Math.floor(c.rnd() * 1000000));
-      }
-    },
-    onTimer: (c) => c.ball.release("saucer"),
-    onDrain: (c) => c.ball.feed(),
-  };
-  const replay = (seed: number): Replay => ({
-    header: { format: 1, tableId: "saucer-demo", dt: 0.001, seed, ticks: 4000 },
-    inputs: [{ tick: 300, action: "plunge_down" }, { tick: 700, action: "plunge_up" }],
-  });
-  const play = (r: Replay) => runReplay(r, [saucerTable], { "saucer-demo": saucerRules });
+  const play = (seed: number) => runReplay(saucerReplay(seed), [saucerTable], { "saucer-demo": saucerRules });
 
   it("plays the same replay to the same physics and rules hashes twice", () => {
-    const a = play(replay(5));
-    const b = play(replay(5));
+    const a = play(5);
+    const b = play(5);
     expect(a.hash).toBe(b.hash);
     expect(a.rulesHash).toBe(b.rulesHash);
     expect(a.game.rules.state.counters.roll).toBeGreaterThan(0); // the sinkhole was reached
   });
 
   it("seeds the rules' random numbers from the header seed", () => {
-    const a = play(replay(5));
-    const b = play(replay(6));
+    const a = play(5);
+    const b = play(6);
     expect(a.game.rules.state.counters.roll).not.toBe(b.game.rules.state.counters.roll);
     expect(a.rulesHash).not.toBe(b.rulesHash);
     expect(a.hash).toBe(b.hash); // the physics does not care about the seed
   });
 
   it("differs from the same replay with the rules left out: the kick is the rules' doing", () => {
-    const withRules = play(replay(5));
-    const free = runReplay(replay(5), [saucerTable]);
-    expect(withRules.hash).not.toBe(free.hash);
+    expect(play(5).hash).not.toBe(runReplay(saucerReplay(5), [saucerTable]).hash);
   });
 
   it("clears the outbox in a replay, so a long replay does not pile up commands", () => {
-    expect(play(replay(5)).game.outbox).toEqual([]);
+    expect(play(5).game.outbox).toEqual([]);
   });
 
   it("hashes the rules state: equal to hashRules of the final state", () => {
-    const r = play(replay(5));
+    const r = play(5);
     expect(r.rulesHash).toBe(hashRules(r.game.rules.state));
   });
 });

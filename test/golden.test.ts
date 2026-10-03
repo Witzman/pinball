@@ -7,6 +7,7 @@ import { runReplay } from "../src/sim/replay";
 import type { Replay } from "../src/sim/replay";
 import { allTables } from "../src/tables";
 import { crowded } from "./core/scenes";
+import { saucerReplay, saucerRules, saucerTable } from "./sim/fixtures";
 
 // Golden hashes: the exact end state of fixed scenes and replays. A change that
 // should not alter results must not alter these. If physics or the hash change
@@ -36,6 +37,12 @@ function compute(): Record<string, number> {
     const result = runReplay(replay, allTables);
     out[`replay/${f.slice(0, -5)}`] = result.hash;
     out[`replay/${f.slice(0, -5)}/rules`] = result.rulesHash;
+  }
+  // a sinkhole scenario with rules: capture, lock, timed release, seeded random
+  for (const seed of [5, 6]) {
+    const r = runReplay(saucerReplay(seed), [saucerTable], { "saucer-demo": saucerRules });
+    out[`rules/saucer-seed${seed}`] = r.hash;
+    out[`rules/saucer-seed${seed}/rules`] = r.rulesHash;
   }
   return out;
 }

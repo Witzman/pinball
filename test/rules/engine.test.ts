@@ -443,7 +443,7 @@ describe("randomness, emit and drains", () => {
       onDrain: () => seen.push("table drain"),
     };
     const h = harness(table);
-    h.at(1).hit("go").at(2).button("left", true).at(3).drain().at(4).ballAtPlunger().run(5);
+    h.at(1).ballAtPlunger().at(2).hit("go").at(3).button("left", true).at(4).drain().at(5).ballAtPlunger().run(6);
     expect(seen).toEqual(["button left", "mode drain", "table drain", "plunger"]);
   });
 });

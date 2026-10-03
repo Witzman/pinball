@@ -105,9 +105,11 @@ const KINDS = {
   [CONTACT_CAPTURE]: "capture",
 } as const;
 
+const BUTTONS = ["left", "right", "plunge"] as const;
+
 /** Edges of the three buttons since the rules last heard. */
 function buttonEvents(g: Game, tick: number, out: RulesEvent[]): void {
-  for (const b of ["left", "right", "plunge"] as const) {
+  for (const b of BUTTONS) {
     if (g.input[b] !== g.pressed[b]) {
       g.pressed[b] = g.input[b];
       out.push({ t: "button", tick, button: b, down: g.input[b] });
@@ -124,8 +126,13 @@ function applyCommands(g: Game, cmds: readonly Command[]): void {
       g.table.world.balls.push(newBall(g));
       g.arrivals += 1;
     } else if (cmd.c === "lockBall") {
+      // the lock id is the sinkhole's trigger id; the ball must be the one it holds
+      const ti = g.table.triggerIds.indexOf(cmd.lock);
+      if (ti < 0) throw new Error(`lockBall: "${cmd.lock}" is not a sinkhole of this table`);
       const b = g.table.world.balls[cmd.ball];
-      if (!b || b.hold === 0) throw new Error(`lockBall "${cmd.lock}": ball ${cmd.ball} is not held in a sinkhole`);
+      if (!b || b.hold !== ti + 1) throw new Error(`lockBall "${cmd.lock}": ball ${cmd.ball} is not the ball held in that sinkhole`);
+    } else if (cmd.c === "releaseBall") {
+      if (!kickTrigger(g, cmd.lock)) throw new Error(`releaseBall "${cmd.lock}": no ball is held in that sinkhole`);
     }
     g.outbox.push(cmd);
   }
@@ -158,15 +165,19 @@ export function tick(g: Game): void {
       g.drains += 1;
     }
   }
-  for (let k = drained.length - 1; k >= 0; k--) w.balls.splice(drained[k]!, 1);
+  // The drained balls stay in the array while the rules run, so the ball indices in the
+  // events and in the commands (lockBall) mean what they meant when the events were made.
   g.cmds.length = 0;
   g.rules.step(t, events, g.cmds);
   applyCommands(g, g.cmds);
+  for (let k = drained.length - 1; k >= 0; k--) w.balls.splice(drained[k]!, 1);
 }
 
 /** Takes the commands the rules gave since the last call (lamps, display, sound for the leaves). */
 export function takeCommands(g: Game): Command[] {
-  return g.outbox.splice(0);
+  const taken = g.outbox;
+  g.outbox = [];
+  return taken;
 }
 
 /** Runs the physics for `dtMs` of real time, in whole ticks; the remainder carries over. */

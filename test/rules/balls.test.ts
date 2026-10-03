@@ -19,12 +19,19 @@ describe("ball manager", () => {
     expect(h.state.shots).toEqual({});
   });
 
-  it("lowers the count on a drain before the handler runs, and never below zero", () => {
+  it("lowers the count on a drain before the handler runs", () => {
     const seen: number[] = [];
     const h = harness({ modes: {}, onDrain: (c) => seen.push(c.ball.inPlay()) });
-    h.at(1).ballAtPlunger().at(2).drain().at(3).drain().run(4);
-    expect(seen).toEqual([0, 0]);
+    h.at(1).ballAtPlunger().at(2).drain().run(3);
+    expect(seen).toEqual([0]);
     expect(h.state.balls.inPlay).toBe(0);
+  });
+
+  it("refuses a drain when no ball is in play, instead of hiding the bad accounting", () => {
+    const h = harness(empty);
+    expect(() => h.at(1).drain().run(2)).toThrow(/no ball is in play/);
+    const twice = harness(empty);
+    expect(() => twice.at(1).ballAtPlunger().at(2).drain().at(3).drain().run(4)).toThrow(/no ball is in play/);
   });
 
   it("refuses a ball at the plunger beyond the capacity", () => {
@@ -57,7 +64,7 @@ describe("ball manager", () => {
     expect(() => harness({ modes: {}, onSwitch: (c) => c.ball.lock("__proto__") }).at(1).hit("a").run(1)).toThrow(/not a usable id/);
   });
 
-  it("releases a lock with a solenoid command for the same id, and brings the ball back into play", () => {
+  it("releases a lock with a releaseBall command for the same id, and brings the ball back into play", () => {
     const h = harness({
       modes: {},
       onSwitch(c, e) {
@@ -68,7 +75,7 @@ describe("ball manager", () => {
     h.at(1).ballAtPlunger().run(2);
     h.rules.step(3, [sw(3, "saucer", 0, "capture")], h.cmds);
     h.run(20);
-    expect(h.cmds).toEqual([{ c: "lockBall", ball: 0, lock: "saucer" }, { c: "fireSolenoid", id: "saucer" }]);
+    expect(h.cmds).toEqual([{ c: "lockBall", ball: 0, lock: "saucer" }, { c: "releaseBall", lock: "saucer" }]);
     expect(h.state.balls).toMatchObject({ inPlay: 1, locked: {} });
   });
 
