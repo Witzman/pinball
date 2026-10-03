@@ -1,5 +1,8 @@
 import type { Ball } from "../core/types";
+import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_TRIGGER } from "../core/types";
 import { kickHeld, step } from "../core/step";
+import { createRules, freePlay } from "../rules";
+import type { Command, Rules, RulesEvent, TableRules } from "../rules";
 import { loadTable, makeBall } from "../table/load";
 import type { LoadedTable } from "../table/load";
 import type { TableDef } from "../table/schema";
@@ -19,6 +22,24 @@ export interface Game {
   accMs: number;
   /** Balls lost down the drain (placeholder until ball flow, #11). */
   drains: number;
+  rules: Rules;
+  /** Commands the rules gave since the leaves last took them (`takeCommands`). */
+  outbox: Command[];
+  /** Buttons as the rules last heard of them, to find the edges. */
+  pressed: GameInput;
+  /** Balls put on the plunger whose arrival the rules have not heard of yet. */
+  arrivals: number;
+  /** Scratch lists reused every tick. */
+  events: RulesEvent[];
+  cmds: Command[];
+  drained: number[];
+}
+
+export interface GameOptions {
+  /** The table's rules; free play (a drained ball is replaced at once) if absent. */
+  rules?: TableRules;
+  /** Seed of the rules' random numbers; the replay header's seed. */
+  seed?: number;
 }
 
 /** One physics tick in milliseconds; a longer frame is cut to MAX_FRAME_MS. */
@@ -27,10 +48,15 @@ const MAX_FRAME_MS = 50;
 /** A ball this far below the playfield (m) has drained. */
 const DRAIN_MARGIN = 0.03;
 
-export function createGame(def: TableDef): Game {
+export function createGame(def: TableDef, opts: GameOptions = {}): Game {
   const table = loadTable(def);
-  const g: Game = { table, input: { left: false, right: false, plunge: false }, paused: false, accMs: 0, drains: 0 };
+  const rules = createRules(opts.rules ?? freePlay, { seed: opts.seed ?? 1, shots: def.shots });
+  const g: Game = {
+    table, input: { left: false, right: false, plunge: false }, paused: false, accMs: 0, drains: 0,
+    rules, outbox: [], pressed: { left: false, right: false, plunge: false }, arrivals: 0, events: [], cmds: [], drained: [],
+  };
   table.world.balls.push(newBall(g));
+  g.arrivals = 1;
   return g;
 }
 
@@ -71,17 +97,76 @@ function applyInput(g: Game): void {
   if (w.plunger) w.plunger.pull = g.input.plunge ? 1 : 0;
 }
 
-/** One physics tick: input applied, world stepped, drained balls replaced. */
+const KINDS = {
+  [CONTACT_HIT]: "hit",
+  [CONTACT_GATE_AB]: "gateAB",
+  [CONTACT_GATE_BA]: "gateBA",
+  [CONTACT_TRIGGER]: "trigger",
+  [CONTACT_CAPTURE]: "capture",
+} as const;
+
+/** Edges of the three buttons since the rules last heard. */
+function buttonEvents(g: Game, tick: number, out: RulesEvent[]): void {
+  for (const b of ["left", "right", "plunge"] as const) {
+    if (g.input[b] !== g.pressed[b]) {
+      g.pressed[b] = g.input[b];
+      out.push({ t: "button", tick, button: b, down: g.input[b] });
+    }
+  }
+}
+
+/** Does what the rules asked of the physical world. Everything also goes to the outbox for the leaves. */
+function applyCommands(g: Game, cmds: readonly Command[]): void {
+  for (const cmd of cmds) {
+    if (cmd.c === "magnet") setMagnet(g, cmd.id, cmd.on);
+    else if (cmd.c === "fireSolenoid") kickTrigger(g, cmd.id);
+    else if (cmd.c === "feedBall") {
+      g.table.world.balls.push(newBall(g));
+      g.arrivals += 1;
+    } else if (cmd.c === "lockBall") {
+      const b = g.table.world.balls[cmd.ball];
+      if (!b || b.hold === 0) throw new Error(`lockBall "${cmd.lock}": ball ${cmd.ball} is not held in a sinkhole`);
+    }
+    g.outbox.push(cmd);
+  }
+}
+
+/**
+ * One tick: input applied, world stepped, then the rules hear what happened (the
+ * ball that arrived, buttons, switches in the order they were hit, drains) and
+ * their commands are carried out before the next step.
+ */
 export function tick(g: Game): void {
   const w = g.table.world;
   applyInput(g);
   step(w);
+  const t = w.tick;
+  const events = g.events;
+  events.length = 0;
+  for (; g.arrivals > 0; g.arrivals--) events.push({ t: "ballAtPlunger", tick: t });
+  buttonEvents(g, t, events);
+  const c = w.contacts;
+  for (let i = 0; i < c.n; i++) {
+    events.push({ t: "switch", tick: t, ball: c.ball[i]!, sw: g.table.switchNames[c.sw[i]! - 1]!, kind: KINDS[c.kind[i]! as keyof typeof KINDS], impulse: c.impulse[i]! });
+  }
+  const drained = g.drained;
+  drained.length = 0;
   for (let i = 0; i < w.balls.length; i++) {
     if (w.balls[i]!.y > g.table.playfieldLength + DRAIN_MARGIN) {
-      w.balls[i] = newBall(g);
+      drained.push(i);
+      events.push({ t: "drain", tick: t, ball: i });
       g.drains += 1;
     }
   }
+  for (let k = drained.length - 1; k >= 0; k--) w.balls.splice(drained[k]!, 1);
+  g.cmds.length = 0;
+  g.rules.step(t, events, g.cmds);
+  applyCommands(g, g.cmds);
+}
+
+/** Takes the commands the rules gave since the last call (lamps, display, sound for the leaves). */
+export function takeCommands(g: Game): Command[] {
+  return g.outbox.splice(0);
 }
 
 /** Runs the physics for `dtMs` of real time, in whole ticks; the remainder carries over. */

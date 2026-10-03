@@ -33,7 +33,9 @@ function compute(): Record<string, number> {
   }
   for (const f of readdirSync(REPLAYS).filter((n) => n.endsWith(".json")).sort()) {
     const replay = JSON.parse(readFileSync(new URL(f, REPLAYS), "utf8")) as Replay;
-    out[`replay/${f.slice(0, -5)}`] = runReplay(replay, allTables).hash;
+    const result = runReplay(replay, allTables);
+    out[`replay/${f.slice(0, -5)}`] = result.hash;
+    out[`replay/${f.slice(0, -5)}/rules`] = result.rulesHash;
   }
   return out;
 }

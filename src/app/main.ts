@@ -1,6 +1,6 @@
 import { applyKey, TouchTracker } from "../input/input";
 import { drawScene } from "../render/canvas";
-import { advance, createGame, setPaused, snapshot } from "../sim/game";
+import { advance, createGame, setPaused, snapshot, takeCommands } from "../sim/game";
 import type { GameInput } from "../sim/game";
 import { demoTable } from "../tables/demo";
 
@@ -81,6 +81,7 @@ document.addEventListener("visibilitychange", () => {
 let last = performance.now();
 function frame(now: number): void {
   advance(game, now - last);
+  takeCommands(game); // lamps, display and sound have no listeners yet (#14, #15)
   last = now;
   const dpr = devicePixelRatio || 1;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

@@ -446,10 +446,6 @@ describe("randomness, emit and drains", () => {
     h.at(1).hit("go").at(2).button("left", true).at(3).drain().at(4).ballAtPlunger().run(5);
     expect(seen).toEqual(["button left", "mode drain", "table drain", "plunger"]);
   });
-
-  it("leaves the ball manager calls for the wiring step", () => {
-    expect(() => harness({ modes: {}, onSwitch: (c) => c.ball.feed() }).at(1).hit("a").run(1)).toThrow(/ball manager/);
-  });
 });
 
 describe("what the engine insists on", () => {

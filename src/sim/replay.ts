@@ -1,7 +1,9 @@
 import { hashWorld } from "../core/hash";
 import { DT } from "../core/step";
 import type { TableDef } from "../table/schema";
-import { createGame, tick } from "./game";
+import { hashRules } from "../rules";
+import type { TableRules } from "../rules";
+import { createGame, takeCommands, tick } from "./game";
 import type { Game } from "./game";
 
 /** The buttons a replay can press and release. */
@@ -13,7 +15,7 @@ export interface ReplayHeader {
   tableId: string;
   /** Physics step in seconds; must equal the engine's DT. */
   dt: number;
-  /** Seed for game randomness. Nothing draws random numbers yet; recorded so old replays stay valid. */
+  /** Seed of the rules' random numbers. */
   seed: number;
   /** Number of ticks to play. */
   ticks: number;
@@ -31,7 +33,10 @@ export interface Replay {
 }
 
 export interface ReplayResult {
+  /** Hash of the physics at the end. */
   hash: number;
+  /** Hash of the rules state at the end. */
+  rulesHash: number;
   game: Game;
 }
 
@@ -67,17 +72,22 @@ function press(g: Game, action: ReplayAction): void {
   else g.input.plunge = down;
 }
 
-/** Plays a replay headless on the table it names and returns the state hash at the end. Throws on an invalid replay or an unknown table. */
-export function runReplay(r: Replay, tables: TableDef[]): ReplayResult {
+/**
+ * Plays a replay headless on the table it names and returns the state hashes at the
+ * end. `rules` maps a table id to its rules (free play if absent). Throws on an
+ * invalid replay or an unknown table.
+ */
+export function runReplay(r: Replay, tables: TableDef[], rules: Record<string, TableRules> = {}): ReplayResult {
   const errors = validateReplay(r);
   if (errors.length > 0) throw new Error(`invalid replay: ${errors.join("; ")}`);
   const def = tables.find((t) => t.id === r.header.tableId);
   if (!def) throw new Error(`unknown table "${r.header.tableId}"`);
-  const game = createGame(def);
+  const game = createGame(def, { rules: Object.hasOwn(rules, def.id) ? rules[def.id] : undefined, seed: r.header.seed });
   let next = 0;
   for (let t = 0; t < r.header.ticks; t++) {
     while (next < r.inputs.length && r.inputs[next]!.tick === t) press(game, r.inputs[next++]!.action);
     tick(game);
+    takeCommands(game); // nobody listens in a replay
   }
-  return { hash: hashWorld(game.table.world), game };
+  return { hash: hashWorld(game.table.world), rulesHash: hashRules(game.rules.state), game };
 }

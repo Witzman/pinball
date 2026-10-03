@@ -4,4 +4,5 @@ export { nextRandom } from "./rng";
 export { serialize, restore, validateState } from "./serialize";
 export { hashRules } from "./hash";
 export { createRules } from "./engine";
+export { freePlay } from "./freeplay";
 export type { Rules, RulesOptions } from "./engine";
