@@ -1,6 +1,8 @@
 import { nextRandom } from "./rng";
 import { createState } from "./state";
 import { validateState } from "./serialize";
+import { createFlow, initialGame, validateFlow } from "./flow";
+import type { Flow, FlowConfig, Machine } from "./flow";
 import type { Command, Ctx, LitState, ModeDef, RulesEvent, RulesState, Shots, SwitchEvent, TableRules } from "./types";
 
 export interface RulesOptions {
@@ -11,6 +13,10 @@ export interface RulesOptions {
   state?: RulesState;
   /** Ticks a shot's switch sequence may take from its first to its last switch; default 5000. */
   shotWindow?: number;
+  /** Run the table as a game (credits, balls per game, game over). Without it the table is free play. */
+  flow?: FlowConfig;
+  /** What the machine remembers between games (credits, high scores); with `flow`, and not with `state`. */
+  machine?: Machine;
 }
 
 export interface Rules {
@@ -41,6 +47,12 @@ const needId = (what: string, id: string): void => {
 };
 
 const NO_SHOTS: readonly string[] = Object.freeze([]);
+
+/** Timer ids with this start belong to the flow. */
+const FLOW_TIMER = "flow.";
+const needScriptTimer = (what: string, id: string): void => {
+  if (id.startsWith(FLOW_TIMER)) throw new Error(`${what}: ids starting with "${FLOW_TIMER}" belong to the game flow`);
+};
 
 /** Problems when a saved state does not fit the table's modes. */
 function fitProblems(table: TableRules, s: RulesState): string[] {
@@ -74,9 +86,15 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
   }
   const shots = opts.shots ?? {};
   for (const [name, list] of Object.entries(shots)) if (list.length === 0) problems.push(`shot "${name}" has no switches`);
+  if (opts.flow) problems.push(...validateFlow(opts.flow));
+  if (opts.machine && !opts.flow) problems.push("machine given without a flow");
+  if (opts.machine && opts.state) problems.push("machine and state both given: a saved state already has its credits");
+  if (opts.state && opts.flow && opts.state.game === null) problems.push("saved state has no game but the table runs with a flow");
+  if (opts.state && !opts.flow && opts.state.game !== null) problems.push("saved state has a game but the table runs without a flow");
   if (problems.length > 0) throw new Error(`rules cannot start:\n${problems.join("\n")}`);
 
   const state = opts.state ? structuredClone(opts.state) : createState(opts.seed);
+  if (opts.flow && !opts.state) state.game = initialGame(opts.flow, opts.machine);
   const shotWindow = opts.shotWindow ?? DEFAULT_SHOT_WINDOW;
   const shotNames = Object.keys(shots).sort(byId);
   let out: Command[] = [];
@@ -155,17 +173,20 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
     },
     after(id, ticks, tag) {
       needId("after", id);
+      needScriptTimer("after", id);
       needTicks(`after "${id}"`, ticks);
       state.timers[id] = tag === undefined ? { due: ctx.now + ticks } : { due: ctx.now + ticks, tag };
       dueKnown = false;
     },
     every(id, ticks, tag) {
       needId("every", id);
+      needScriptTimer("every", id);
       needTicks(`every "${id}"`, ticks);
       state.timers[id] = tag === undefined ? { due: ctx.now + ticks, every: ticks } : { due: ctx.now + ticks, every: ticks, tag };
       dueKnown = false;
     },
     cancel(id) {
+      needScriptTimer("cancel", id);
       delete state.timers[id];
       dueKnown = false;
     },
@@ -232,6 +253,33 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
       state.player.score += n;
     },
   };
+
+  const persisted = new Set(table.persist ?? []);
+  const flow: Flow | null = opts.flow
+    ? createFlow(opts.flow, {
+        state,
+        emit: (cmd) => {
+          out.push(cmd);
+        },
+        setTimer(id, ticks) {
+          state.timers[id] = { due: ctx.now + ticks };
+          dueKnown = false;
+        },
+        reset(keepPersist) {
+          for (const id of Object.keys(state.modes).sort(byId)) ctx.stop(id);
+          for (const id of Object.keys(state.timers)) if (!id.startsWith(FLOW_TIMER)) delete state.timers[id];
+          dueKnown = false;
+          state.shots = {};
+          for (const id of Object.keys(state.lamps).sort(byId)) {
+            if (keepPersist && persisted.has(id)) continue;
+            if (state.lamps[id] === "lit") out.push({ c: "setLamp", lamp: id, state: "off" });
+            delete state.lamps[id];
+          }
+          for (const id of Object.keys(state.counters)) if (!(keepPersist && persisted.has(id))) delete state.counters[id];
+        },
+        feed: () => ctx.ball.feed(),
+      })
+    : null;
 
   /** Mode handlers for an event: the modes running when it began, in id order, skipping any stopped meanwhile. */
   const toModes = (e: RulesEvent): void => {
@@ -309,6 +357,13 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
       b.toFeed = Math.max(0, b.toFeed - 1);
       state.shots = {}; // a sequence started with the last ball means nothing for the next
     }
+    if (flow) {
+      if (flow.consumes(e)) {
+        flow.press(e);
+        return;
+      }
+      if (!flow.admits()) return; // between balls and games the table is not playing
+    }
     toModes(e);
     if (e.t === "switch") {
       table.onSwitch?.(ctx, e);
@@ -322,7 +377,8 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
     } else if (e.t === "ballAtPlunger") {
       table.onBallStart?.(ctx);
     }
-    // button events reach the modes only. `persist` is read by the ball flow of #11.
+    // button events reach the modes only
+    if (flow && e.t === "drain") flow.afterDrain();
   };
 
   const fireTimers = (tick: number): void => {
@@ -335,6 +391,10 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
       if (t.every !== undefined) t.due += t.every;
       else delete state.timers[id];
       dueKnown = false;
+      if (flow && id.startsWith(FLOW_TIMER)) {
+        flow.timer(id);
+        continue;
+      }
       const e: RulesEvent = t.tag === undefined ? { t: "timer", tick, id } : { t: "timer", tick, id, tag: t.tag };
       toModes(e);
       table.onTimer?.(ctx, id, t.tag);

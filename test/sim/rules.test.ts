@@ -246,7 +246,7 @@ describe("commands that reach the physics", () => {
 });
 
 describe("replays with rules", () => {
-  const play = (seed: number) => runReplay(saucerReplay(seed), [saucerTable], { "saucer-demo": saucerRules });
+  const play = (seed: number) => runReplay(saucerReplay(seed), [saucerTable], { "saucer-demo": { rules: saucerRules } });
 
   it("plays the same replay to the same physics and rules hashes twice", () => {
     const a = play(5);

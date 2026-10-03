@@ -12,6 +12,7 @@ export function createState(seed: number): RulesState {
     shots: {},
     modes: {},
     balls: { inPlay: 0, locked: {}, toFeed: 0, saver: { until: 0 }, capacity: 1 },
+    game: null,
     player: { score: 0, ballNo: 0, persist: {} },
   };
 }

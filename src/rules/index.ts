@@ -5,4 +5,6 @@ export { serialize, restore, validateState } from "./serialize";
 export { hashRules } from "./hash";
 export { createRules } from "./engine";
 export { freePlay } from "./freeplay";
+export { validateFlow } from "./flow";
+export type { FlowConfig, Machine } from "./flow";
 export type { Rules, RulesOptions } from "./engine";

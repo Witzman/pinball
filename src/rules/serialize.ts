@@ -30,9 +30,12 @@ function stable(v: unknown): string {
   return JSON.stringify(v);
 }
 
+/** `game` is left out while null, so a table without a flow saves and hashes as it did before flows existed. */
 export function serialize(s: RulesState): string {
   assertPlain(s, "state");
-  return stable(s);
+  if (s.game !== null) return stable(s);
+  const { game: _none, ...rest } = s;
+  return stable(rest);
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -42,7 +45,11 @@ const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFin
 const isNat = (v: unknown): v is number => isNum(v) && Number.isSafeInteger(v) && v >= 0;
 const recordOf = (v: unknown, ok: (x: unknown) => boolean): boolean => isRecord(v) && Object.values(v).every(ok);
 
-const KEYS = ["v", "tick", "rng", "lamps", "counters", "timers", "shots", "modes", "balls", "player"];
+const KEYS = ["v", "tick", "rng", "lamps", "counters", "timers", "shots", "modes", "balls", "game", "player"];
+const PHASES = ["attract", "play", "bonus", "over", "buyin"];
+
+/** Scores, highest first. */
+const isBoard = (v: unknown): boolean => Array.isArray(v) && v.every(isNat) && v.every((x, i) => i === 0 || (v[i - 1] as number) >= x);
 
 /** Problems with a parsed state, or an empty list. */
 export function validateState(s: unknown): string[] {
@@ -67,6 +74,16 @@ export function validateState(s: unknown): string[] {
   } else if (b.inPlay > b.capacity) {
     errs.push(`balls.inPlay ${b.inPlay} is above balls.capacity ${b.capacity}`);
   }
+  const g = s.game === undefined ? null : s.game; // absent = no flow
+  if (g !== null) {
+    if (
+      !isRecord(g) || typeof g.phase !== "string" || !PHASES.includes(g.phase) || !isNat(g.credits) || !isNat(g.shootAgain) ||
+      typeof g.bought !== "boolean" || typeof g.tilted !== "boolean" || typeof g.replayDone !== "boolean" ||
+      !isRecord(g.board) || !isBoard(g.board.main) || !isBoard(g.board.bought)
+    ) {
+      errs.push("game must be null or {phase, credits, shootAgain, bought, tilted, replayDone, board {main, bought} sorted highest first}");
+    }
+  }
   const p = s.player;
   if (!isRecord(p) || !isNum(p.score) || !isNat(p.ballNo) || !recordOf(p.persist, isNum)) {
     errs.push("player must be {score, ballNo, persist}");
@@ -84,5 +101,7 @@ export function restore(json: string): RulesState {
   }
   const errs = validateState(parsed);
   if (errs.length > 0) throw new Error(`rules state invalid:\n${errs.join("\n")}`);
-  return parsed as RulesState;
+  const state = parsed as RulesState;
+  if (state.game === undefined) state.game = null;
+  return state;
 }

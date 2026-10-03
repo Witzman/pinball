@@ -2,12 +2,15 @@ import { hashWorld } from "../core/hash";
 import { DT } from "../core/step";
 import type { TableDef } from "../table/schema";
 import { hashRules } from "../rules";
-import type { TableRules } from "../rules";
 import { createGame, takeCommands, tick } from "./game";
+import type { TableSetup } from "./game";
 import type { Game } from "./game";
 
 /** The buttons a replay can press and release. */
-export const ACTIONS = ["left_down", "left_up", "right_down", "right_up", "plunge_down", "plunge_up"] as const;
+export const ACTIONS = [
+  "left_down", "left_up", "right_down", "right_up", "plunge_down", "plunge_up",
+  "coin_down", "coin_up", "start_down", "start_up", "buyin_down", "buyin_up",
+] as const;
 export type ReplayAction = (typeof ACTIONS)[number];
 
 export interface ReplayHeader {
@@ -67,22 +70,21 @@ export function validateReplay(r: unknown): string[] {
 
 function press(g: Game, action: ReplayAction): void {
   const down = action.endsWith("_down");
-  if (action.startsWith("left")) g.input.left = down;
-  else if (action.startsWith("right")) g.input.right = down;
-  else g.input.plunge = down;
+  const button = action.slice(0, action.lastIndexOf("_")) as "left" | "right" | "plunge" | "coin" | "start" | "buyin";
+  g.input[button] = down;
 }
 
 /**
  * Plays a replay headless on the table it names and returns the state hashes at the
- * end. `rules` maps a table id to its rules (free play if absent). Throws on an
- * invalid replay or an unknown table.
+ * end. `setups` maps a table id to its rules and flow (free play if absent). Throws
+ * on an invalid replay or an unknown table.
  */
-export function runReplay(r: Replay, tables: TableDef[], rules: Record<string, TableRules> = {}): ReplayResult {
+export function runReplay(r: Replay, tables: TableDef[], setups: Record<string, TableSetup> = {}): ReplayResult {
   const errors = validateReplay(r);
   if (errors.length > 0) throw new Error(`invalid replay: ${errors.join("; ")}`);
   const def = tables.find((t) => t.id === r.header.tableId);
   if (!def) throw new Error(`unknown table "${r.header.tableId}"`);
-  const game = createGame(def, { rules: Object.hasOwn(rules, def.id) ? rules[def.id] : undefined, seed: r.header.seed });
+  const game = createGame(def, { ...(Object.hasOwn(setups, def.id) ? setups[def.id] : {}), seed: r.header.seed });
   let next = 0;
   for (let t = 0; t < r.header.ticks; t++) {
     while (next < r.inputs.length && r.inputs[next]!.tick === t) press(game, r.inputs[next++]!.action);

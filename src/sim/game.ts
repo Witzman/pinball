@@ -2,7 +2,7 @@ import type { Ball } from "../core/types";
 import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_TRIGGER } from "../core/types";
 import { kickHeld, step } from "../core/step";
 import { createRules, freePlay } from "../rules";
-import type { Command, Rules, RulesEvent, TableRules } from "../rules";
+import type { Command, FlowConfig, Machine, Rules, RulesEvent, TableRules } from "../rules";
 import { loadTable, makeBall } from "../table/load";
 import type { LoadedTable } from "../table/load";
 import type { TableDef } from "../table/schema";
@@ -12,6 +12,10 @@ export interface GameInput {
   left: boolean;
   right: boolean;
   plunge: boolean;
+  /** Machine buttons: insert a credit, start a game, buy extra balls. */
+  coin: boolean;
+  start: boolean;
+  buyin: boolean;
 }
 
 export interface Game {
@@ -35,11 +39,19 @@ export interface Game {
   drained: number[];
 }
 
-export interface GameOptions {
+/** What a table brings to a game besides its geometry. */
+export interface TableSetup {
   /** The table's rules; free play (a drained ball is replaced at once) if absent. */
   rules?: TableRules;
+  /** Run it as a game: credits, balls per game, game over. No flow = no game, a ball on the plunger from the start. */
+  flow?: FlowConfig;
+}
+
+export interface GameOptions extends TableSetup {
   /** Seed of the rules' random numbers; the replay header's seed. */
   seed?: number;
+  /** What the machine remembers (credits, scores); only with a flow. */
+  machine?: Machine;
 }
 
 /** One physics tick in milliseconds; a longer frame is cut to MAX_FRAME_MS. */
@@ -50,13 +62,22 @@ const DRAIN_MARGIN = 0.03;
 
 export function createGame(def: TableDef, opts: GameOptions = {}): Game {
   const table = loadTable(def);
-  const rules = createRules(opts.rules ?? freePlay, { seed: opts.seed ?? 1, shots: def.shots });
+  const rules = createRules(opts.rules ?? freePlay, {
+    seed: opts.seed ?? 1,
+    shots: def.shots,
+    ...(opts.flow ? { flow: opts.flow } : {}),
+    ...(opts.machine ? { machine: opts.machine } : {}),
+  });
+  const idle = (): GameInput => ({ left: false, right: false, plunge: false, coin: false, start: false, buyin: false });
   const g: Game = {
-    table, input: { left: false, right: false, plunge: false }, paused: false, accMs: 0, drains: 0,
-    rules, outbox: [], pressed: { left: false, right: false, plunge: false }, arrivals: 0, events: [], cmds: [], drained: [],
+    table, input: idle(), paused: false, accMs: 0, drains: 0,
+    rules, outbox: [], pressed: idle(), arrivals: 0, events: [], cmds: [], drained: [],
   };
-  table.world.balls.push(newBall(g));
-  g.arrivals = 1;
+  if (!opts.flow) {
+    // free play: a ball waits on the plunger. With a flow the first ball comes when a game starts.
+    table.world.balls.push(newBall(g));
+    g.arrivals = 1;
+  }
   return g;
 }
 
@@ -105,7 +126,7 @@ const KINDS = {
   [CONTACT_CAPTURE]: "capture",
 } as const;
 
-const BUTTONS = ["left", "right", "plunge"] as const;
+const BUTTONS = ["left", "right", "plunge", "coin", "start", "buyin"] as const;
 
 /** Edges of the three buttons since the rules last heard. */
 function buttonEvents(g: Game, tick: number, out: RulesEvent[]): void {
