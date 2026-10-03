@@ -122,7 +122,7 @@ describe("end-of-ball bonus", () => {
     h.take();
     h.run(645);
     expect(h.state.game!.phase).toBe("over");
-    expect(h.cmds).toEqual([{ c: "gameOver", score: 1200, bought: false }]);
+    expect(h.cmds).toEqual([{ c: "hiscore", board: "main", score: 1200, rank: 1 }, { c: "gameOver", score: 1200, bought: false }]);
   });
 
   it("skips the bonus of a tilted ball", () => {

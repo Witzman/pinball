@@ -22,6 +22,9 @@ export interface ReplayHeader {
   seed: number;
   /** Number of ticks to play. */
   ticks: number;
+  /** What the machine held when the replay starts (with a flow): credits, and the score boards. */
+  credits?: number;
+  boards?: { main: number[]; bought: number[] };
 }
 
 /** An input takes effect before the physics step of `tick` (tick 0 = before the first step). */
@@ -53,6 +56,12 @@ export function validateReplay(r: unknown): string[] {
   if (typeof h.tableId !== "string" || h.tableId === "") errors.push("header.tableId must be a non-empty string");
   if (h.dt !== DT) errors.push(`header.dt must be ${DT}, got ${String(h.dt)}`);
   if (!Number.isInteger(h.seed)) errors.push("header.seed must be an integer");
+  if (h.credits !== undefined && !(Number.isSafeInteger(h.credits) && (h.credits as number) >= 0)) errors.push("header.credits must be a whole number, 0 or more");
+  if (h.boards !== undefined) {
+    const b = h.boards as { main?: unknown; bought?: unknown } | null;
+    const board = (v: unknown): boolean => Array.isArray(v) && v.every((x) => Number.isSafeInteger(x) && x >= 0) && v.every((x, i) => i === 0 || (v[i - 1] as number) >= x);
+    if (typeof b !== "object" || b === null || !board(b.main) || !board(b.bought)) errors.push("header.boards must be {main, bought}, each a list of scores, highest first");
+  }
   if (!Number.isInteger(h.ticks) || (h.ticks as number) < 0) errors.push("header.ticks must be a non-negative integer");
   if (!Array.isArray(inputs)) return [...errors, "inputs must be an array"];
   let last = 0;
@@ -84,7 +93,14 @@ export function runReplay(r: Replay, tables: TableDef[], setups: Record<string, 
   if (errors.length > 0) throw new Error(`invalid replay: ${errors.join("; ")}`);
   const def = tables.find((t) => t.id === r.header.tableId);
   if (!def) throw new Error(`unknown table "${r.header.tableId}"`);
-  const game = createGame(def, { ...(Object.hasOwn(setups, def.id) ? setups[def.id] : {}), seed: r.header.seed });
+  const setup = Object.hasOwn(setups, def.id) ? setups[def.id]! : {};
+  const h = r.header;
+  // what the machine held at the start; credits default to the flow's own starting credits
+  const machine =
+    h.credits !== undefined || h.boards !== undefined
+      ? { credits: h.credits ?? setup.flow?.startCredits ?? 0, boards: h.boards ?? { main: [], bought: [] } }
+      : undefined;
+  const game = createGame(def, { ...setup, seed: h.seed, ...(machine ? { machine } : {}) });
   let next = 0;
   for (let t = 0; t < r.header.ticks; t++) {
     while (next < r.inputs.length && r.inputs[next]!.tick === t) press(game, r.inputs[next++]!.action);
