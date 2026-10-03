@@ -80,7 +80,7 @@ describe("The Colony, step 1: the outline", () => {
       }
     }
     expect(stuck).toEqual([]);
-  });
+  }, 60000); // about 5 s on a quiet machine: the default 5 s limit failed it under load
 
   /** The switches the rules hear for a plunger pulled for `ms` and then let go, and the ball's track until it drains. */
   function launch(ms: number) {
