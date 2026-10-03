@@ -33,9 +33,16 @@ function stable(v: unknown): string {
 /** `game` is left out while null, so a table without a flow saves and hashes as it did before flows existed. */
 export function serialize(s: RulesState): string {
   assertPlain(s, "state");
-  if (s.game !== null) return stable(s);
-  const { game: _none, ...rest } = s;
-  return stable(rest);
+  if (s.game === null) {
+    const { game: _none, ...rest } = s;
+    return stable(rest);
+  }
+  if (s.game.tiltHeat === 0 && s.game.tiltAt === 0) {
+    // quiet: left out, so a game saved before tilt existed reads and hashes as before
+    const { tiltHeat: _h, tiltAt: _a, ...game } = s.game;
+    return stable({ ...s, game });
+  }
+  return stable(s);
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -79,9 +86,10 @@ export function validateState(s: unknown): string[] {
     if (
       !isRecord(g) || typeof g.phase !== "string" || !PHASES.includes(g.phase) || !isNat(g.credits) || !isNat(g.shootAgain) ||
       typeof g.bought !== "boolean" || typeof g.tilted !== "boolean" || typeof g.replayDone !== "boolean" || !isNat(g.extraBalls) || typeof g.saverWait !== "boolean" ||
+      (g.tiltHeat !== undefined && !isNat(g.tiltHeat)) || (g.tiltAt !== undefined && !isNat(g.tiltAt)) ||
       !isRecord(g.board) || !isBoard(g.board.main) || !isBoard(g.board.bought)
     ) {
-      errs.push("game must be null or {phase, credits, shootAgain, bought, tilted, replayDone, extraBalls, saverWait, board {main, bought} sorted highest first}");
+      errs.push("game must be null or {phase, credits, shootAgain, bought, tilted, replayDone, extraBalls, saverWait, tiltHeat?, tiltAt?, board {main, bought} sorted highest first}");
     }
   }
   const p = s.player;
@@ -103,5 +111,9 @@ export function restore(json: string): RulesState {
   if (errs.length > 0) throw new Error(`rules state invalid:\n${errs.join("\n")}`);
   const state = parsed as RulesState;
   if (state.game === undefined) state.game = null;
+  else if (state.game !== null) {
+    state.game.tiltHeat ??= 0;
+    state.game.tiltAt ??= 0;
+  }
   return state;
 }

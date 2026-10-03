@@ -22,6 +22,12 @@ export interface FlowConfig {
   highScoreCredit?: boolean;
   /** Scores a board keeps; default 10. */
   boardSize?: number;
+  /**
+   * Tilt: each nudge adds one heat, which cools one unit per `decayTicks`. Up to `free`
+   * heat is quiet; up to `free + warnings` each nudge is a warning; more is a tilt (the
+   * ball is dead: flippers off, no bonus, no saver). Absent = no tilt, nudges are free.
+   */
+  tilt?: { free: number; warnings: number; decayTicks: number };
   /** After a game, a player with `cost` credits may buy `balls` more balls within `windowTicks`; absent = no buy-in. */
   buyIn?: { cost: number; balls: number; windowTicks: number };
 }
@@ -53,6 +59,11 @@ export function validateFlow(cfg: FlowConfig): string[] {
   };
   opt("replayScore", cfg.replayScore, 0);
   opt("boardSize", cfg.boardSize, 1);
+  if (cfg.tilt) {
+    opt("tilt.free", cfg.tilt.free, 0);
+    opt("tilt.warnings", cfg.tilt.warnings, 0);
+    opt("tilt.decayTicks", cfg.tilt.decayTicks, 1);
+  }
   if (cfg.buyIn) {
     opt("buyIn.cost", cfg.buyIn.cost, 1);
     opt("buyIn.balls", cfg.buyIn.balls, 1);
@@ -84,6 +95,8 @@ export function initialGame(cfg: FlowConfig, machine?: Machine): GameState {
     replayDone: false,
     extraBalls: 0,
     saverWait: false,
+    tiltHeat: 0,
+    tiltAt: 0,
     board: machine
       ? { main: machine.boards.main.slice(0, cfg.boardSize ?? DEFAULT_BOARD), bought: machine.boards.bought.slice(0, cfg.boardSize ?? DEFAULT_BOARD) }
       : { main: [], bought: [] },
@@ -104,6 +117,8 @@ export interface FlowHost {
   /** Awards the table's end-of-ball bonus; returns the points. */
   awardBonus(): number;
   now(): number;
+  /** Sends every locked ball out again, so a tilted ball cannot be stuck in a lock. */
+  releaseLocks(): void;
   /** Asks the ball manager for a ball on the plunger. */
   feed(): void;
 }
@@ -122,6 +137,8 @@ export interface Flow {
   extraBall(): boolean;
   saver(ticks: number): void;
   awardCredit(n: number): void;
+  /** A nudge reached a ball: it heats the table, and enough heat is a warning or a tilt. */
+  nudged(e: RulesEvent): void;
   /** The score may have changed: pays the replay credit when it is reached. */
   scored(): void;
   phase(): GameState["phase"];
@@ -140,6 +157,8 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
     const g = game();
     g.phase = "play";
     g.tilted = false;
+    g.tiltHeat = 0;
+    g.tiltAt = 0;
     g.saverWait = cfg.saverTicks > 0;
     host.state.balls.saver.until = 0;
     host.reset(true);
@@ -304,6 +323,30 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
     },
     awardCredit(n) {
       credit(n);
+    },
+    nudged(e) {
+      const g = game();
+      const tilt = cfg.tilt;
+      if (!tilt || g.phase !== "play" || g.tilted || e.t !== "nudge") return;
+      const now = e.tick;
+      // cool: one unit per decayTicks since the clock was last set; keep the remainder
+      const k = Math.floor((now - g.tiltAt) / tilt.decayTicks);
+      if (k > 0 && g.tiltHeat > 0) {
+        g.tiltHeat = Math.max(0, g.tiltHeat - k);
+        if (g.tiltHeat > 0) g.tiltAt += k * tilt.decayTicks;
+      }
+      if (g.tiltHeat === 0) g.tiltAt = now; // the clock starts when the table heats up
+      g.tiltHeat += 1;
+      if (g.tiltHeat <= tilt.free) return;
+      if (g.tiltHeat <= tilt.free + tilt.warnings) {
+        host.emit({ c: "dmd", show: { id: "tiltWarning", args: { n: g.tiltHeat - tilt.free } } });
+        host.emit({ c: "sound", play: "warn" });
+        return;
+      }
+      g.tilted = true; // the ball is dead: the sim switches the flippers off, endBall skips the saver and the bonus
+      host.emit({ c: "dmd", show: { id: "tilt" } });
+      host.emit({ c: "sound", play: "tilt" });
+      host.releaseLocks();
     },
     scored,
     phase: () => game().phase,

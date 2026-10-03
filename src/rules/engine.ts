@@ -326,6 +326,9 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
           }
         },
         now: () => ctx.now,
+        releaseLocks() {
+          for (const id of Object.keys(state.balls.locked).sort(byId)) while ((state.balls.locked[id] ?? 0) > 0) ctx.ball.release(id);
+        },
         feed: () => ctx.ball.feed(),
       })
     : null;
@@ -424,7 +427,10 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
       b.toFeed = Math.max(0, b.toFeed - 1);
       state.shots = {}; // a sequence started with the last ball means nothing for the next
     }
-    if (e.t === "nudge") return; // the flow counts nudges for the tilt (#20, step 2); table scripts never see them
+    if (e.t === "nudge") {
+      flow?.nudged(e); // the flow counts nudges for the tilt; table scripts never see them
+      return;
+    }
     if (flow) {
       if (flow.consumes(e)) {
         flow.press(e);
