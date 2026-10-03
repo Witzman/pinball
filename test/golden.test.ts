@@ -5,7 +5,7 @@ import { step } from "../src/core/step";
 import { hashWorld } from "../src/core/hash";
 import { runReplay } from "../src/sim/replay";
 import type { Replay } from "../src/sim/replay";
-import { allTables } from "../src/tables";
+import { allTables, tableSetups } from "../src/tables";
 import { crowded } from "./core/scenes";
 import { saucerReplay, saucerRules, saucerTable } from "./sim/fixtures";
 
@@ -44,6 +44,20 @@ function compute(): Record<string, number> {
     out[`rules/saucer-seed${seed}`] = r.hash;
     out[`rules/saucer-seed${seed}/rules`] = r.rulesHash;
   }
+  // a game on the demo table with its real rules: coin and start from the buttons, a launch
+  const game = runReplay(
+    {
+      header: { format: 1, tableId: "demo", dt: 0.001, seed: 3, ticks: 3000, credits: 2, boards: { main: [4000], bought: [] } },
+      inputs: [
+        { tick: 10, action: "coin_down" }, { tick: 20, action: "coin_up" }, { tick: 30, action: "start_down" }, { tick: 40, action: "start_up" },
+        { tick: 400, action: "plunge_down" }, { tick: 800, action: "plunge_up" },
+      ],
+    },
+    allTables,
+    tableSetups,
+  );
+  out["game/demo-start"] = game.hash;
+  out["game/demo-start/rules"] = game.rulesHash;
   return out;
 }
 
