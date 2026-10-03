@@ -1,0 +1,274 @@
+import * as pc from "playcanvas";
+import type { FlipperView, Snapshot, StaticScene } from "../../sim/snapshot";
+import { drawHud } from "../hud";
+import type { Renderer } from "../renderer";
+import { playfieldTexture, studioSky } from "./art";
+import { fitDistance } from "./frame";
+
+// The PlayCanvas renderer (issue #45): the same Renderer interface as the canvas placeholder,
+// a lit 3D table behind it. World metres become centimetres here (1 unit = 1 cm), x to the
+// right, z down the table (toward the player), y up. It reads only the static scene and the
+// snapshot; it never touches the simulation. Loaded on demand, so it is not in the first load.
+
+const S = 100;
+const RAIL_H = 2.4;
+const RAIL_T = 0.55;
+
+const color = (r: number, g: number, b: number) => new pc.Color(r, g, b);
+
+function material(opts: { diffuse?: [number, number, number]; emissive?: [number, number, number]; metal?: number; gloss?: number; opacity?: number; map?: pc.Texture; emissiveIntensity?: number }): pc.StandardMaterial {
+  const m = new pc.StandardMaterial();
+  if (opts.diffuse) m.diffuse = color(...opts.diffuse);
+  if (opts.emissive) {
+    m.emissive = color(...opts.emissive);
+    m.emissiveIntensity = opts.emissiveIntensity ?? 1;
+  }
+  m.useMetalness = true;
+  m.metalness = opts.metal ?? 0;
+  m.gloss = opts.gloss ?? 0.5;
+  if (opts.map) m.diffuseMap = opts.map;
+  if (opts.opacity !== undefined) {
+    m.opacity = opts.opacity;
+    m.blendType = pc.BLEND_NORMAL;
+  }
+  m.update();
+  return m;
+}
+
+function texture(device: pc.GraphicsDevice, source: HTMLCanvasElement, srgb = true): pc.Texture {
+  const t = new pc.Texture(device, { width: source.width, height: source.height, format: srgb ? pc.PIXELFORMAT_SRGBA8 : pc.PIXELFORMAT_RGBA8, mipmaps: true, minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR, magFilter: pc.FILTER_LINEAR, addressU: pc.ADDRESS_CLAMP_TO_EDGE, addressV: pc.ADDRESS_CLAMP_TO_EDGE });
+  t.setSource(source);
+  return t;
+}
+
+export interface PlayCanvasOptions {
+  /** The canvas to draw on; it must not have a 2D context. */
+  canvas: HTMLCanvasElement;
+  /** Where the text overlay (the display and the touch band's names) goes. */
+  overlayParent: HTMLElement;
+}
+
+export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
+  const app = new pc.Application(opts.canvas, { graphicsDeviceOptions: { antialias: true, alpha: false, powerPreference: "high-performance" } });
+  app.autoRender = false;
+  app.setCanvasFillMode(pc.FILLMODE_NONE); // the default keeps the aspect of the first canvas size; the app sets the size itself
+  app.scene.ambientLight = color(0.22, 0.22, 0.27);
+  const overlay = document.createElement("canvas");
+  overlay.style.cssText = "position:fixed;inset:0;pointer-events:none;width:100vw;height:100vh";
+  opts.overlayParent.appendChild(overlay);
+  const octx = overlay.getContext("2d")!;
+  let w = 1;
+  let h = 1;
+  let dpr = 1;
+
+  // reflections for the metal: a studio sky made on a canvas
+  try {
+    const sky = texture(app.graphicsDevice, studioSky(), false);
+    sky.projection = pc.TEXTUREPROJECTION_EQUIRECT;
+    app.scene.envAtlas = pc.EnvLighting.generateAtlas(sky);
+    app.scene.skyboxIntensity = 1;
+  } catch (e) {
+    console.warn("playcanvas: no reflections", e);
+  }
+
+  const root = new pc.Entity("table");
+  app.root.addChild(root);
+  const dyn = new pc.Entity("dynamic");
+  root.addChild(dyn);
+
+  const camera = new pc.Entity("camera");
+  camera.addComponent("camera", { fov: 50, nearClip: 5, farClip: 600, clearColor: new pc.Color(0.03, 0.035, 0.05) });
+  app.root.addChild(camera);
+  camera.camera!.layers = camera.camera!.layers.filter((l) => l !== pc.LAYERID_SKYBOX); // the sky lights the metal, it is not drawn behind the table
+
+  const key = new pc.Entity("key");
+  key.addComponent("light", { type: "directional", color: color(1, 0.95, 0.88), intensity: 1.6, castShadows: true, shadowResolution: 2048, shadowDistance: 260, shadowBias: 0.15, normalOffsetBias: 0.06, shadowIntensity: 0.8, shadowType: pc.SHADOW_PCF3_32F });
+  key.setEulerAngles(58, -28, 0);
+  app.root.addChild(key);
+  const fill = new pc.Entity("fill");
+  fill.addComponent("light", { type: "directional", color: color(0.55, 0.62, 0.9), intensity: 0.5, castShadows: false });
+  fill.setEulerAngles(35, 150, 0);
+  app.root.addChild(fill);
+
+  const mats = {
+    chrome: material({ diffuse: [0.8, 0.82, 0.88], metal: 1, gloss: 0.88 }),
+    rubber: material({ diffuse: [0.08, 0.3, 0.85], metal: 0, gloss: 0.45 }),
+    amber: material({ diffuse: [0.9, 0.55, 0.12], emissive: [1, 0.55, 0.1], emissiveIntensity: 0.6, metal: 0.2, gloss: 0.7 }),
+    post: material({ diffuse: [0.75, 0.78, 0.85], metal: 1, gloss: 0.8 }),
+    bumperBody: material({ diffuse: [0.55, 0.08, 0.06], metal: 0.1, gloss: 0.7 }),
+    bumperCap: material({ diffuse: [1, 0.75, 0.3], emissive: [1, 0.6, 0.15], emissiveIntensity: 1.1, metal: 0, gloss: 0.9 }),
+    flipper: material({ diffuse: [0.95, 0.93, 0.88], metal: 0.15, gloss: 0.8 }),
+    flipperRubber: material({ diffuse: [0.9, 0.12, 0.1], metal: 0, gloss: 0.5 }),
+    ball: material({ diffuse: [0.92, 0.94, 1], metal: 1, gloss: 0.97 }),
+    insert: material({ diffuse: [0.1, 0.1, 0.1], emissive: [1, 0.8, 0.2], emissiveIntensity: 0.9, metal: 0, gloss: 0.9 }),
+    hole: material({ diffuse: [0.02, 0.02, 0.02], metal: 0, gloss: 0.2 }),
+    plastic: material({ diffuse: [0.6, 0.8, 1], opacity: 0.3, metal: 0, gloss: 0.95 }),
+  };
+
+  const add = (parent: pc.Entity, type: "box" | "cylinder" | "sphere", mat: pc.Material, shadows = true): pc.Entity => {
+    const e = new pc.Entity();
+    e.addComponent("render", { type, material: mat, castShadows: shadows, receiveShadows: true });
+    parent.addChild(e);
+    return e;
+  };
+  const place = (e: pc.Entity, x: number, y: number, z: number, sx: number, sy: number, sz: number, rotY = 0) => {
+    e.setLocalPosition(x, y, z);
+    e.setLocalScale(sx, sy, sz);
+    e.setLocalEulerAngles(0, rotY, 0);
+  };
+
+  let sceneW = 0.52;
+  let sceneL = 1.05;
+  const X = (x: number) => (x - sceneW / 2) * S;
+  const Z = (y: number) => (y - sceneL / 2) * S;
+
+  let flipperEntities: pc.Entity[][] = [];
+  const balls: pc.Entity[] = [];
+  let built: pc.Entity | null = null;
+
+  function build(scene: StaticScene): void {
+    sceneW = scene.width;
+    sceneL = scene.length;
+    if (built) {
+      built.destroy();
+      built = null;
+    }
+    const g = new pc.Entity("static");
+    root.addChild(g);
+    built = g;
+    // the playfield
+    const tex = texture(app.graphicsDevice, playfieldTexture(1024, 2048, sceneW, sceneL));
+    const field = add(g, "box", material({ diffuse: [1, 1, 1], map: tex, metal: 0, gloss: 0.55 }));
+    place(field, 0, -0.5, 0, sceneW * S, 1, sceneL * S);
+    // rails
+    const joints = new Set<string>();
+    for (const wl of scene.walls) {
+      const ax = X(wl.ax);
+      const az = Z(wl.ay);
+      const bx = X(wl.bx);
+      const bz = Z(wl.by);
+      const len = Math.hypot(bx - ax, bz - az);
+      if (len < 0.01) continue;
+      const mat = wl.kind === "rubber" ? mats.rubber : wl.kind === "switch" ? mats.amber : mats.chrome;
+      const e = add(g, "box", mat);
+      place(e, (ax + bx) / 2, RAIL_H / 2, (az + bz) / 2, len + (wl.kind === "wall" ? RAIL_T * 0.2 : 0), RAIL_H, RAIL_T, (-Math.atan2(bz - az, bx - ax) * 180) / Math.PI);
+      if (wl.kind === "wall") {
+        for (const [x, z] of [[ax, az], [bx, bz]] as const) {
+          const k = `${x.toFixed(2)},${z.toFixed(2)}`;
+          if (joints.has(k)) continue;
+          joints.add(k);
+          const cap = add(g, "cylinder", mats.chrome);
+          place(cap, x, RAIL_H / 2, z, RAIL_T, RAIL_H, RAIL_T);
+        }
+      }
+    }
+    // posts and bumpers
+    for (const p of scene.posts) {
+      const x = X(p.x);
+      const z = Z(p.y);
+      const r = p.r * S;
+      if (p.kind === "switch") {
+        const body = add(g, "cylinder", mats.bumperBody);
+        place(body, x, 1.3, z, r * 2, 2.6, r * 2);
+        const cap = add(g, "cylinder", mats.bumperCap);
+        place(cap, x, 2.75, z, r * 1.5, 0.35, r * 1.5);
+        const ring = add(g, "cylinder", mats.chrome);
+        place(ring, x, 2.4, z, r * 2.15, 0.25, r * 2.15);
+      } else {
+        const e = add(g, "cylinder", mats.post);
+        place(e, x, 1.6, z, r * 2, 3.2, r * 2);
+      }
+    }
+    // inserts: the lit discs of the rollovers; a dark hole for a sinkhole
+    for (const t of scene.triggers) {
+      const e = add(g, "cylinder", t.hold ? mats.hole : mats.insert, false);
+      place(e, X(t.x), 0.04, Z(t.y), t.r * S * 2.2, 0.08, t.r * S * 2.2);
+    }
+    // ramps: translucent plastic strips on the playfield, raised by their zone
+    for (const r of scene.ramps) {
+      const hh = (scene.heights[r.zone] ?? 0.03) * S;
+      for (let i = 1; i < r.path.length; i++) {
+        const a = r.path[i - 1]!;
+        const b = r.path[i]!;
+        const ax = X(a.x);
+        const az = Z(a.y);
+        const bx = X(b.x);
+        const bz = Z(b.y);
+        const e = add(g, "box", mats.plastic, false);
+        place(e, (ax + bx) / 2, hh + 0.1, (az + bz) / 2, Math.hypot(bx - ax, bz - az), 0.2, r.width * S, (-Math.atan2(bz - az, bx - ax) * 180) / Math.PI);
+      }
+    }
+  }
+
+  function flipperParts(i: number): pc.Entity[] {
+    let parts = flipperEntities[i];
+    if (!parts) {
+      parts = [add(dyn, "cylinder", mats.flipperRubber), add(dyn, "cylinder", mats.flipperRubber), add(dyn, "box", mats.flipper)];
+      flipperEntities[i] = parts;
+    }
+    return parts;
+  }
+
+  function updateFlipper(i: number, f: FlipperView): void {
+    const [a, b, body] = flipperParts(i) as [pc.Entity, pc.Entity, pc.Entity];
+    const px = X(f.px);
+    const pz = Z(f.py);
+    const tx = X(f.tx);
+    const tz = Z(f.ty);
+    place(a, px, RAIL_H / 2 + 0.2, pz, f.r0 * S * 2, RAIL_H + 0.4, f.r0 * S * 2);
+    place(b, tx, RAIL_H / 2 + 0.2, tz, f.r1 * S * 2, RAIL_H + 0.4, f.r1 * S * 2);
+    const len = Math.hypot(tx - px, tz - pz);
+    place(body, (px + tx) / 2, RAIL_H / 2 + 0.2, (pz + tz) / 2, len, RAIL_H + 0.4, (f.r0 + f.r1) * S, (-Math.atan2(tz - pz, tx - px) * 180) / Math.PI);
+  }
+
+  let framedFor = "";
+  let distance = 100;
+  function updateCamera(snap: Snapshot): void {
+    const c = snap.camera;
+    const fov = c.mode === "tilted" ? c.fovDeg : 30;
+    const pitch = (c.mode === "tilted" ? c.pitchDeg : 0) * (Math.PI / 180);
+    const key = `${w}x${h} ${fov} ${pitch} ${sceneW} ${sceneL}`;
+    if (key !== framedFor) {
+      framedFor = key;
+      distance = fitDistance(pitch, fov, w / h, sceneW * S, sceneL * S, RAIL_H * 3);
+    }
+    camera.camera!.fov = fov;
+    camera.setPosition(0, Math.cos(pitch) * distance, Math.sin(pitch) * distance);
+    camera.lookAt(0, 0, 0);
+  }
+
+  app.start();
+
+  return {
+    resize(cssW, cssH, ratio) {
+      w = cssW;
+      h = cssH;
+      dpr = ratio;
+      app.graphicsDevice.maxPixelRatio = ratio;
+      app.graphicsDevice.resizeCanvas(cssW, cssH);
+      overlay.width = Math.round(cssW * ratio);
+      overlay.height = Math.round(cssH * ratio);
+    },
+    setScene(scene) {
+      build(scene);
+    },
+    draw(snap) {
+      snap.flippers.forEach((f, i) => updateFlipper(i, f));
+      while (balls.length < snap.balls.length) balls.push(add(dyn, "sphere", mats.ball));
+      balls.forEach((e, i) => {
+        const b = snap.balls[i];
+        e.enabled = b !== undefined;
+        if (b) place(e, X(b.x), b.r * S + b.z * S, Z(b.y), b.r * S * 2, b.r * S * 2, b.r * S * 2);
+      });
+      updateCamera(snap);
+      app.renderNextFrame = true;
+      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      octx.clearRect(0, 0, w, h);
+      drawHud(octx, snap.hud.lines, w, h);
+    },
+    dispose() {
+      overlay.remove();
+      app.destroy();
+    },
+  };
+}
