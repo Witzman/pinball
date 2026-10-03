@@ -27,6 +27,11 @@ export interface Segment {
   zoneMask: number;
   /** Switch id (1-based index into the table's switch names); 0 = no switch. */
   sw: number;
+  /**
+   * One-way wall: only blocks a ball on the side the normal (-dy, dx) of a->b
+   * points to. A ball behind it passes through; once in front it cannot return.
+   */
+  oneWay?: boolean;
 }
 
 export interface Circle {
@@ -107,14 +112,41 @@ export interface Plunger {
   releaseV: number;
 }
 
-/** Hits on colliders that carry a switch, in the order they happened. Cleared every step. */
+/**
+ * A height-zone gate: a line a->b. A ball whose path crosses it from the left
+ * of a->b (cross(b - a, p - a) > 0, side A) to the right (side B) and is in
+ * `zoneA` moves to `zoneB`; crossing back from B in `zoneB` moves it to `zoneA`.
+ * Ramp mouths and exits are gates. The crossing is tested on the straight line
+ * from where the ball was at the start of the tick to where it ends it, and the
+ * zone changes at the end of the tick: a bounce next to a gate within one tick
+ * can misjudge it by a few millimetres.
+ */
+export interface Gate {
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+  zoneA: number;
+  zoneB: number;
+  /** Switch id reported on a crossing; 0 = none. */
+  sw: number;
+}
+
+/** What a contact record means. */
+export const CONTACT_HIT = 0;
+export const CONTACT_GATE_AB = 1;
+export const CONTACT_GATE_BA = 2;
+
+/** Events on switches, in the order they happened. Cleared every step. */
 export interface ContactBuffer {
   n: number;
   tick: Int32Array;
   ball: Int32Array;
   sw: Int32Array;
-  /** Normal impulse in N*s. */
+  /** Normal impulse in N*s; 0 for events that are not collisions. */
   impulse: Float64Array;
+  /** CONTACT_HIT, CONTACT_GATE_AB or CONTACT_GATE_BA. */
+  kind: Uint8Array;
 }
 
 /** Uniform grid over the static colliders (segments first, then circles), CSR layout. */
@@ -137,6 +169,7 @@ export interface World {
   balls: Ball[];
   segments: Segment[];
   circles: Circle[];
+  gates: Gate[];
   flippers: Flipper[];
   plunger: Plunger | null;
   /** Effective gravity along +y, m/s^2 (already projected for the slope). */

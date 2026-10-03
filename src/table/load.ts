@@ -1,5 +1,5 @@
 import { createWorld, makeFlipper, makePlunger, slopeGravity } from "../core/world";
-import type { Ball, Circle, Segment, World } from "../core/types";
+import type { Ball, Circle, Gate, Segment, World } from "../core/types";
 import type { Point, TableDef } from "./schema";
 import { validateTable } from "./validate";
 
@@ -52,7 +52,7 @@ export function loadTable(def: TableDef): LoadedTable {
 
   for (const w of def.walls) {
     const mat = def.materials[w.material]!;
-    const base = { e: mat.e, mu: mat.mu, zoneMask: zoneMask(w.zones), sw: swId(w.switch) };
+    const base = { e: mat.e, mu: mat.mu, zoneMask: zoneMask(w.zones), sw: swId(w.switch), ...(w.oneWay === true ? { oneWay: true } : {}) };
     let pts: Point[];
     if (w.type === "segment") pts = [w.a, w.b];
     else if (w.type === "polyline") pts = w.closed ? [...w.points, w.points[0]!] : w.points;
@@ -68,6 +68,10 @@ export function loadTable(def: TableDef): LoadedTable {
     const mat = def.materials[p.material]!;
     circles.push({ x: p.at[0] * MM, y: p.at[1] * MM, r: p.r * MM, e: mat.e, mu: mat.mu, zoneMask: zoneMask(p.zones), sw: swId(p.switch) });
   }
+
+  const gates: Gate[] = (def.gates ?? []).map((g) => ({
+    ax: g.a[0] * MM, ay: g.a[1] * MM, bx: g.b[0] * MM, by: g.b[1] * MM, zoneA: g.zoneA, zoneB: g.zoneB, sw: swId(g.switch),
+  }));
 
   const flippers = def.flippers.map((f) => {
     const mat = def.materials[f.material]!;
@@ -88,7 +92,7 @@ export function loadTable(def: TableDef): LoadedTable {
       })
     : null;
 
-  const world = createWorld({ balls: [], segments, circles, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg) });
+  const world = createWorld({ balls: [], segments, circles, gates, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg) });
   return { world, flipperIds: def.flippers.map((f) => f.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM };
 }
 

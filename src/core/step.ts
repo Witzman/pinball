@@ -4,6 +4,7 @@ import { hitFlipper, pushOutFlipper } from "./flipper";
 import { advancePlunger, hitPlunger } from "./plunger";
 import { hitCircle, setHit } from "./sweep";
 import type { Hit } from "./sweep";
+import { CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT } from "./types";
 import type { Ball, World } from "./types";
 
 /** The fixed physics step in seconds. Part of the replay header. */
@@ -50,6 +51,7 @@ function earliest(w: World, b: Ball, rem: number): Hit | null {
     let nx = -aby / len;
     let ny = abx / len;
     const d0 = (b.x - s.ax) * nx + (b.y - s.ay) * ny;
+    if (d0 < 0 && s.oneWay === true) continue; // behind a one-way wall: it does not exist
     if (d0 < 0) {
       nx = -nx;
       ny = -ny;
@@ -108,6 +110,36 @@ function respond(b: Ball, h: Hit): number {
   return jn;
 }
 
+function record(w: World, bi: number, sw: number, impulse: number, kind: number): void {
+  const out = w.contacts;
+  if (out.n >= out.sw.length) return;
+  const c = out.n++;
+  out.tick[c] = w.tick;
+  out.ball[c] = bi;
+  out.sw[c] = sw;
+  out.impulse[c] = impulse;
+  out.kind[c] = kind;
+}
+
+/** Zone changes for a ball that moved from (x0, y0) to where it is now. */
+function crossGates(w: World, b: Ball, bi: number, x0: number, y0: number): void {
+  for (const g of w.gates) {
+    const abx = g.bx - g.ax;
+    const aby = g.by - g.ay;
+    const s0 = abx * (y0 - g.ay) - aby * (x0 - g.ax);
+    const s1 = abx * (b.y - g.ay) - aby * (b.x - g.ax);
+    const fromA = s0 > 0;
+    if (fromA === s1 > 0) continue;
+    // where along the gate the path crosses it, 0..1
+    const f = s0 / (s0 - s1);
+    const u = ((x0 + (b.x - x0) * f - g.ax) * abx + (y0 + (b.y - y0) * f - g.ay) * aby) / (abx * abx + aby * aby);
+    if (u < 0 || u > 1) continue;
+    if (fromA ? b.zone !== g.zoneA : b.zone !== g.zoneB) continue;
+    b.zone = fromA ? g.zoneB : g.zoneA;
+    if (g.sw > 0) record(w, bi, g.sw, 0, fromA ? CONTACT_GATE_AB : CONTACT_GATE_BA);
+  }
+}
+
 export function step(w: World): void {
   const out = w.contacts;
   out.n = 0;
@@ -123,6 +155,8 @@ export function step(w: World): void {
     b.vx *= 1 - w.drag * DT;
     b.vy *= 1 - w.drag * DT;
     b.w *= 1 - w.spinDamping * DT;
+    const x0 = b.x;
+    const y0 = b.y;
     let rem = DT;
     for (let pass = 0; pass < MAX_PASSES; pass++) {
       const hit = earliest(w, b, rem);
@@ -134,16 +168,11 @@ export function step(w: World): void {
       b.x += b.vx * hit.t;
       b.y += b.vy * hit.t;
       const jn = respond(b, hit);
-      if (hit.sw > 0 && jn > 0 && out.n < out.sw.length) {
-        const c = out.n++;
-        out.tick[c] = w.tick;
-        out.ball[c] = bi;
-        out.sw[c] = hit.sw;
-        out.impulse[c] = jn;
-      }
+      if (hit.sw > 0 && jn > 0) record(w, bi, hit.sw, jn, CONTACT_HIT);
       rem -= hit.t;
       if (rem <= 0) break;
     }
+    crossGates(w, b, bi, x0, y0);
   }
   w.tick += 1;
 }

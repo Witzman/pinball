@@ -140,12 +140,14 @@ describe("loadTable", () => {
     for (let i = 0; i < 400; i++) step(t.world);
     p.pull = 0;
     let highest = Infinity;
+    let xPassingFlap = 0;
     for (let i = 0; i < 1500; i++) {
       step(t.world);
       highest = Math.min(highest, b.y);
+      if (xPassingFlap === 0 && b.y < 0.3) xPassingFlap = b.x;
     }
     expect(highest).toBeLessThan(0.3);
-    expect(b.x).toBeGreaterThan(0.48);
+    expect(xPassingFlap).toBeGreaterThan(0.48); // went up the lane, through the one-way flap
   });
 
   it("steers a launched ball out of the lane into the playfield", () => {

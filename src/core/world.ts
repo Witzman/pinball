@@ -1,6 +1,6 @@
 import { buildGrid } from "./grid";
 import { POSE_POINTS, poseFlipper } from "./flipper";
-import type { Ball, Circle, ContactBuffer, Flipper, Plunger, Segment, World } from "./types";
+import type { Ball, Circle, ContactBuffer, Flipper, Gate, Plunger, Segment, World } from "./types";
 
 export const CONTACT_CAPACITY = 64;
 
@@ -11,6 +11,7 @@ function contactBuffer(): ContactBuffer {
     ball: new Int32Array(CONTACT_CAPACITY),
     sw: new Int32Array(CONTACT_CAPACITY),
     impulse: new Float64Array(CONTACT_CAPACITY),
+    kind: new Uint8Array(CONTACT_CAPACITY),
   };
 }
 
@@ -18,6 +19,7 @@ export interface WorldInit {
   balls: Ball[];
   segments: Segment[];
   circles: Circle[];
+  gates?: Gate[];
   flippers?: Flipper[];
   plunger?: Plunger | null;
   gravity: number;
@@ -27,7 +29,7 @@ export interface WorldInit {
 
 /** Colliders are static after this call: the grid is built here, once. */
 export function createWorld(init: WorldInit): World {
-  return { ...init, flippers: init.flippers ?? [], plunger: init.plunger ?? null, drag: init.drag ?? 0, spinDamping: init.spinDamping ?? 0, grid: buildGrid(init.segments, init.circles), contacts: contactBuffer(), tick: 0 };
+  return { ...init, gates: init.gates ?? [], flippers: init.flippers ?? [], plunger: init.plunger ?? null, drag: init.drag ?? 0, spinDamping: init.spinDamping ?? 0, grid: buildGrid(init.segments, init.circles), contacts: contactBuffer(), tick: 0 };
 }
 
 /** Gravity along the playfield for a slope in degrees. Load time only: sin is not allowed in the step. */
