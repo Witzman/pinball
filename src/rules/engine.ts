@@ -1,0 +1,319 @@
+import { nextRandom } from "./rng";
+import { createState } from "./state";
+import { validateState } from "./serialize";
+import type { Command, Ctx, LitState, ModeDef, RulesEvent, RulesState, Shots, SwitchEvent, TableRules } from "./types";
+
+export interface RulesOptions {
+  seed: number;
+  /** `TableDef.shots`: each shot is the switches to hit in this order. */
+  shots?: Shots;
+  /** Continue from a saved state instead of starting fresh (the seed is then ignored). */
+  state?: RulesState;
+  /** Ticks a shot's switch sequence may take from its first to its last switch; default 5000. */
+  shotWindow?: number;
+}
+
+export interface Rules {
+  /** The live state. Read it (save, hash, assert); only the engine writes it, so its caches stay right. */
+  readonly state: RulesState;
+  /**
+   * Advances to `tick`: fires due timers, then handles `events` in order. Commands
+   * are appended to `out`. Call once per tick, ticks never going backwards (a bad
+   * tick throws). A timer fires at most once per call: after a gap, an `every`
+   * timer replays its missed beats one per call. A tick with no events and no
+   * timer due returns at once and allocates nothing.
+   */
+  step(tick: number, events: readonly RulesEvent[], out: Command[]): void;
+}
+
+const DEFAULT_SHOT_WINDOW = 5000;
+/** Mode enter/exit handlers may start other modes; this many levels deep is a loop in the script. */
+const MAX_DEPTH = 16;
+
+const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/** A record's own entry; "constructor" or "toString" are not entries. */
+const own = <T>(rec: Record<string, T>, id: string): T | undefined => (Object.hasOwn(rec, id) ? rec[id] : undefined);
+
+/** Ids become keys of plain records: "__proto__" would write to the prototype instead. */
+const needId = (what: string, id: string): void => {
+  if (id === "" || id === "__proto__") throw new Error(`${what}: "${id}" is not a usable id`);
+};
+
+const NO_SHOTS: readonly string[] = Object.freeze([]);
+
+/** Problems when a saved state does not fit the table's modes. */
+function fitProblems(table: TableRules, s: RulesState): string[] {
+  const errs: string[] = [];
+  for (const [id, m] of Object.entries(s.modes)) {
+    const def = own(table.modes, id);
+    if (!def) errs.push(`saved state has mode "${id}" which the table does not define`);
+    else if (!Object.hasOwn(def.phases, m.phase)) errs.push(`saved state has mode "${id}" in phase "${m.phase}" which the table does not define`);
+  }
+  return errs;
+}
+
+function shotFit(shots: Shots, s: RulesState): string[] {
+  return Object.keys(s.shots)
+    .filter((name) => !Object.hasOwn(shots, name))
+    .map((name) => `saved state has progress on shot "${name}" which the table does not define`);
+}
+
+function tableProblems(table: TableRules): string[] {
+  const errs: string[] = [];
+  for (const [id, def] of Object.entries(table.modes)) {
+    if (!Object.hasOwn(def.phases, def.start)) errs.push(`mode "${id}": start phase "${def.start}" is not one of its phases`);
+  }
+  return errs;
+}
+
+export function createRules(table: TableRules, opts: RulesOptions): Rules {
+  const problems = tableProblems(table);
+  if (opts.state) {
+    problems.push(...validateState(opts.state), ...fitProblems(table, opts.state), ...shotFit(opts.shots ?? {}, opts.state));
+  }
+  const shots = opts.shots ?? {};
+  for (const [name, list] of Object.entries(shots)) if (list.length === 0) problems.push(`shot "${name}" has no switches`);
+  if (problems.length > 0) throw new Error(`rules cannot start:\n${problems.join("\n")}`);
+
+  const state = opts.state ? structuredClone(opts.state) : createState(opts.seed);
+  const shotWindow = opts.shotWindow ?? DEFAULT_SHOT_WINDOW;
+  const shotNames = Object.keys(shots).sort(byId);
+  let out: Command[] = [];
+  let depth = 0;
+
+  // Earliest due timer, or Infinity. Recomputed lazily so an idle tick costs one comparison.
+  let minDue = Infinity;
+  let dueKnown = false;
+  const earliest = (): number => {
+    if (!dueKnown) {
+      minDue = Infinity;
+      for (const id in state.timers) if (state.timers[id]!.due < minDue) minDue = state.timers[id]!.due;
+      dueKnown = true;
+    }
+    return minDue;
+  };
+
+  const modeDef = (id: string): ModeDef => {
+    const def = own(table.modes, id);
+    if (!def) throw new Error(`unknown mode "${id}"`);
+    return def;
+  };
+
+  const needTicks = (what: string, ticks: number): void => {
+    if (!Number.isSafeInteger(ticks) || ticks < 1) throw new Error(`${what}: ticks must be a whole number of at least 1, got ${ticks}`);
+  };
+
+  // Running modes in id order. A new array is made whenever the set changes, so a
+  // dispatch that holds the old one sees the modes that were running when it began.
+  let modeIds: string[] | null = null;
+  const runningModes = (): string[] => (modeIds ??= Object.keys(state.modes).sort(byId));
+
+  // Modes whose exit handler is running: stop of them is a no-op (start is too: they are still running), goto throws.
+  const leaving = new Set<string>();
+
+  const enter = (id: string): void => {
+    if (++depth > MAX_DEPTH) throw new Error(`mode "${id}": enter/exit handlers nest more than ${MAX_DEPTH} deep`);
+    try {
+      modeDef(id).phases[state.modes[id]!.phase]!.enter?.(ctx);
+    } finally {
+      depth--;
+    }
+  };
+  const leave = (id: string): void => {
+    if (++depth > MAX_DEPTH) throw new Error(`mode "${id}": enter/exit handlers nest more than ${MAX_DEPTH} deep`);
+    leaving.add(id);
+    try {
+      modeDef(id).phases[state.modes[id]!.phase]!.exit?.(ctx);
+    } finally {
+      leaving.delete(id);
+      depth--;
+    }
+  };
+
+  const ctx: Ctx = {
+    now: state.tick,
+    rnd: () => nextRandom(state),
+    lamp: (id) => own(state.lamps, id) ?? "off",
+    setLamp(id, s: LitState) {
+      needId("setLamp", id);
+      const wasLit = own(state.lamps, id) === "lit";
+      state.lamps[id] = s;
+      // the leaves only know lit and off: collected shows as off
+      if (wasLit !== (s === "lit")) out.push({ c: "setLamp", lamp: id, state: s === "lit" ? "lit" : "off" });
+    },
+    count: (id) => own(state.counters, id) ?? 0,
+    add(id, n = 1) {
+      needId("add", id);
+      if (!Number.isFinite(n)) throw new Error(`add "${id}": ${n} is not a finite number`);
+      return (state.counters[id] = (own(state.counters, id) ?? 0) + n);
+    },
+    reset(id) {
+      delete state.counters[id];
+    },
+    after(id, ticks, tag) {
+      needId("after", id);
+      needTicks(`after "${id}"`, ticks);
+      state.timers[id] = tag === undefined ? { due: ctx.now + ticks } : { due: ctx.now + ticks, tag };
+      dueKnown = false;
+    },
+    every(id, ticks, tag) {
+      needId("every", id);
+      needTicks(`every "${id}"`, ticks);
+      state.timers[id] = tag === undefined ? { due: ctx.now + ticks, every: ticks } : { due: ctx.now + ticks, every: ticks, tag };
+      dueKnown = false;
+    },
+    cancel(id) {
+      delete state.timers[id];
+      dueKnown = false;
+    },
+    mode: (id) => own(state.modes, id) ?? null,
+    start(id) {
+      const def = modeDef(id);
+      if (own(state.modes, id)) return; // already running (also while its exit handler runs)
+      state.modes[id] = { phase: def.start, since: ctx.now, data: {} };
+      modeIds = null;
+      enter(id);
+    },
+    stop(id) {
+      modeDef(id);
+      if (!own(state.modes, id) || leaving.has(id)) return;
+      try {
+        leave(id);
+      } finally {
+        delete state.modes[id];
+        modeIds = null;
+      }
+    },
+    goto(id, phase) {
+      const def = modeDef(id);
+      if (!Object.hasOwn(def.phases, phase)) throw new Error(`mode "${id}" has no phase "${phase}"`);
+      const m = own(state.modes, id);
+      if (!m) throw new Error(`goto: mode "${id}" is not running`);
+      if (leaving.has(id)) throw new Error(`goto: mode "${id}" is already leaving its phase`);
+      leave(id);
+      state.modes[id] = { phase, since: ctx.now, data: m.data };
+      enter(id);
+    },
+    ball: {
+      inPlay: () => state.balls.inPlay,
+      lock() {
+        throw new Error("ball.lock arrives with the ball manager wiring");
+      },
+      release() {
+        throw new Error("ball.release arrives with the ball manager wiring");
+      },
+      feed() {
+        throw new Error("ball.feed arrives with the ball manager wiring");
+      },
+    },
+    emit: (cmd) => {
+      out.push(cmd);
+    },
+    addScore(n) {
+      if (!Number.isFinite(n)) throw new Error(`addScore: ${n} is not a finite number`);
+      state.player.score += n;
+    },
+  };
+
+  /** Mode handlers for an event: the modes running when it began, in id order, skipping any stopped meanwhile. */
+  const toModes = (e: RulesEvent): void => {
+    const ids = runningModes();
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i]!;
+      const m = own(state.modes, id);
+      if (!m) continue;
+      modeDef(id).phases[m.phase]!.on?.[e.t]?.(ctx, e);
+    }
+  };
+
+  /**
+   * Advances the switch sequences of all shots; returns the shots this switch completed.
+   * A switch that is not in a shot's list is ignored by it. One that is in the list but
+   * not the next expected falls back to the longest start of the sequence that the
+   * switches seen so far still end with (so A, A, A, B completes [A, A, B]); if none
+   * does, the progress is dropped. The window runs from the first switch of the
+   * sequence; after a fallback it keeps the old start, which only makes it shorter.
+   */
+  const hitShots = (e: SwitchEvent): readonly string[] => {
+    let done: string[] | null = null;
+    for (const name of shotNames) {
+      const list = shots[name]!;
+      let cur = own(state.shots, name);
+      if (cur && e.tick - cur.at > shotWindow) {
+        delete state.shots[name];
+        cur = undefined;
+      }
+      const have = cur ? cur.i : 0;
+      let at: number;
+      if (e.sw === list[have]) at = have + 1;
+      else if (!list.includes(e.sw)) continue;
+      else {
+        // longest k <= have such that list[0..k-1] equals the last k switches seen (list[have-k+1..have-1], then e.sw)
+        at = 0;
+        for (let k = Math.min(have, list.length - 1); k >= 1; k--) {
+          let ok = list[k - 1] === e.sw;
+          for (let j = 0; ok && j < k - 1; j++) ok = list[j] === list[have - k + 1 + j];
+          if (ok) {
+            at = k;
+            break;
+          }
+        }
+      }
+      if (at === list.length) {
+        delete state.shots[name];
+        (done ??= []).push(name);
+      } else if (at === 0) {
+        delete state.shots[name];
+      } else {
+        state.shots[name] = { i: at, at: at === 1 || !cur ? e.tick : cur.at };
+      }
+    }
+    return done ?? NO_SHOTS;
+  };
+
+  const handle = (e: RulesEvent): void => {
+    toModes(e);
+    if (e.t === "switch") {
+      table.onSwitch?.(ctx, e);
+      for (const shot of hitShots(e)) {
+        const se: RulesEvent = { t: "shot", tick: e.tick, shot };
+        toModes(se);
+        table.onShot?.(ctx, shot, e);
+      }
+    } else if (e.t === "drain") {
+      table.onDrain?.(ctx);
+    }
+    // button and ballAtPlunger reach the modes only; the table's onBallStart and
+    // `persist` are called by the ball manager wiring (step 4)
+  };
+
+  const fireTimers = (tick: number): void => {
+    const due: string[] = [];
+    for (const id in state.timers) if (state.timers[id]!.due <= tick) due.push(id);
+    due.sort((a, b) => state.timers[a]!.due - state.timers[b]!.due || byId(a, b));
+    for (const id of due) {
+      const t = state.timers[id];
+      if (!t || t.due > tick) continue; // cancelled or re-armed by an earlier handler
+      if (t.every !== undefined) t.due += t.every;
+      else delete state.timers[id];
+      dueKnown = false;
+      const e: RulesEvent = t.tag === undefined ? { t: "timer", tick, id } : { t: "timer", tick, id, tag: t.tag };
+      toModes(e);
+      table.onTimer?.(ctx, id, t.tag);
+    }
+  };
+
+  return {
+    state,
+    step(tick, events, sink) {
+      if (!Number.isSafeInteger(tick) || tick < state.tick) throw new Error(`step: tick ${tick} must be a whole number, not before tick ${state.tick}`);
+      state.tick = tick;
+      ctx.now = tick;
+      if (events.length === 0 && earliest() > tick) return;
+      out = sink;
+      if (earliest() <= tick) fireTimers(tick);
+      for (let i = 0; i < events.length; i++) handle(events[i]!);
+    },
+  };
+}
