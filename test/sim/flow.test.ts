@@ -300,3 +300,62 @@ describe("a game in a replay", () => {
     expect(play(noCoin).rulesHash).not.toBe(play(replay()).rulesHash);
   });
 });
+
+describe("the machine's state in a replay header", () => {
+  const base = (): Replay => ({
+    header: { format: 1, tableId: "demo", dt: 0.001, seed: 4, ticks: 300 },
+    inputs: [{ tick: 10, action: "start_down" }, { tick: 20, action: "start_up" }],
+  });
+  const play = (r: Replay) => runReplay(r, [demoTable], { demo: setup });
+
+  it("starts a replay with the credits the header names, instead of the flow's", () => {
+    const none = base();
+    none.header.credits = 0;
+    expect(play(none).game.rules.state.game).toMatchObject({ phase: "attract", credits: 0 });
+    const some = base();
+    some.header.credits = 5;
+    expect(play(some).game.rules.state.game).toMatchObject({ phase: "play", credits: 4 });
+    expect(play(base()).game.rules.state.game).toMatchObject({ phase: "play", credits: 1 }); // the flow's own 2
+  });
+
+  it("starts with the boards of the header", () => {
+    const r = base();
+    r.header.boards = { main: [900, 100], bought: [50] };
+    expect(play(r).game.rules.state.game!.board).toEqual({ main: [900, 100], bought: [50] });
+  });
+
+  it("checks the new header fields", () => {
+    const bad = (edit: (r: Replay) => void) => {
+      const r = base();
+      edit(r);
+      return validateReplay(r).join("\n");
+    };
+    expect(bad((r) => { r.header.credits = -1; })).toMatch(/header.credits/);
+    expect(bad((r) => { r.header.credits = 1.5; })).toMatch(/header.credits/);
+    expect(bad((r) => { r.header.boards = { main: [1, 2], bought: [] }; })).toMatch(/header.boards/);
+    expect(bad((r) => { (r.header as { boards: unknown }).boards = { main: [] }; })).toMatch(/header.boards/);
+    expect(bad((r) => { r.header.credits = 3; r.header.boards = { main: [9, 8], bought: [] }; })).toBe("");
+  });
+
+  it("refuses a machine in the header when the table runs without a flow", () => {
+    const r = base();
+    r.header.credits = 3;
+    expect(() => runReplay(r, [demoTable], {})).toThrow(/machine given without a flow/);
+  });
+
+  it("reproduces a whole paid game from the header and the buttons", () => {
+    const r: Replay = {
+      header: { format: 1, tableId: "demo", dt: 0.001, seed: 9, ticks: 2000, credits: 1, boards: { main: [], bought: [] } },
+      inputs: [
+        { tick: 5, action: "start_down" }, { tick: 15, action: "start_up" },
+        { tick: 300, action: "plunge_down" }, { tick: 700, action: "plunge_up" },
+      ],
+    };
+    const a = play(r);
+    const b = play(r);
+    expect(a.rulesHash).toBe(b.rulesHash);
+    expect(a.hash).toBe(b.hash);
+    expect(a.game.rules.state.game).toMatchObject({ phase: "play", credits: 0 });
+  });
+});
+

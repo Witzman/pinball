@@ -16,7 +16,17 @@ export interface FlowConfig {
   bonusTicks: number;
   /** Most extra balls a game can award. */
   extraBallMax: number;
+  /** A game that reaches this score earns one credit, once; 0 or absent = no replay score. */
+  replayScore?: number;
+  /** A score that makes the main board earns one credit. */
+  highScoreCredit?: boolean;
+  /** Scores a board keeps; default 10. */
+  boardSize?: number;
+  /** After a game, a player with `cost` credits may buy `balls` more balls within `windowTicks`; absent = no buy-in. */
+  buyIn?: { cost: number; balls: number; windowTicks: number };
 }
+
+const DEFAULT_BOARD = 10;
 
 /** What survives from one game to the next on a machine (kept by the leaves, see src/app). */
 export interface Machine {
@@ -27,7 +37,7 @@ export interface Machine {
 /** Problems with a flow config, or an empty list. */
 export function validateFlow(cfg: FlowConfig): string[] {
   const errs: string[] = [];
-  const nat = (name: keyof FlowConfig, min: number) => {
+  const nat = (name: "ballsPerGame" | "startCost" | "startCredits" | "overTicks" | "saverTicks" | "bonusTicks" | "extraBallMax", min: number) => {
     const v = cfg[name];
     if (!Number.isSafeInteger(v) || v < min) errs.push(`flow.${name} must be a whole number of at least ${min}, got ${v}`);
   };
@@ -38,6 +48,29 @@ export function validateFlow(cfg: FlowConfig): string[] {
   nat("saverTicks", 0);
   nat("bonusTicks", 1);
   nat("extraBallMax", 0);
+  const opt = (what: string, v: number | undefined, min: number) => {
+    if (v !== undefined && (!Number.isSafeInteger(v) || v < min)) errs.push(`flow.${what} must be a whole number of at least ${min}, got ${v}`);
+  };
+  opt("replayScore", cfg.replayScore, 0);
+  opt("boardSize", cfg.boardSize, 1);
+  if (cfg.buyIn) {
+    opt("buyIn.cost", cfg.buyIn.cost, 1);
+    opt("buyIn.balls", cfg.buyIn.balls, 1);
+    opt("buyIn.windowTicks", cfg.buyIn.windowTicks, 1);
+  }
+  return errs;
+}
+
+/** Problems with a machine's saved state, which may come from untrusted storage; empty when fine. */
+export function validateMachine(m: Machine): string[] {
+  const errs: string[] = [];
+  if (!Number.isSafeInteger(m.credits) || m.credits < 0) errs.push(`machine.credits must be a whole number, 0 or more, got ${m.credits}`);
+  for (const name of ["main", "bought"] as const) {
+    const b = m.boards?.[name];
+    if (!Array.isArray(b) || !b.every((x) => Number.isSafeInteger(x) && x >= 0) || !b.every((x, i) => i === 0 || b[i - 1]! >= x)) {
+      errs.push(`machine.boards.${name} must be a list of scores, whole numbers, highest first`);
+    }
+  }
   return errs;
 }
 
@@ -51,7 +84,9 @@ export function initialGame(cfg: FlowConfig, machine?: Machine): GameState {
     replayDone: false,
     extraBalls: 0,
     saverWait: false,
-    board: machine ? { main: [...machine.boards.main], bought: [...machine.boards.bought] } : { main: [], bought: [] },
+    board: machine
+      ? { main: machine.boards.main.slice(0, cfg.boardSize ?? DEFAULT_BOARD), bought: machine.boards.bought.slice(0, cfg.boardSize ?? DEFAULT_BOARD) }
+      : { main: [], bought: [] },
   };
 }
 
@@ -61,6 +96,7 @@ export interface FlowHost {
   emit(cmd: Command): void;
   /** Arms a one-shot timer under a reserved `flow.` id. */
   setTimer(id: string, ticks: number): void;
+  clearTimer(id: string): void;
   /** Stops modes, cancels table timers, forgets shots, clears lamps and counters (all but the table's `persist` ones when `keepPersist`). */
   reset(keepPersist: boolean): void;
   /** Stops modes, cancels table timers and forgets shots, keeping lamps and counters (the bonus reads them). */
@@ -85,11 +121,15 @@ export interface Flow {
   switchSeen(tick: number): void;
   extraBall(): boolean;
   saver(ticks: number): void;
+  awardCredit(n: number): void;
+  /** The score may have changed: pays the replay credit when it is reached. */
+  scored(): void;
   phase(): GameState["phase"];
 }
 
 const OVER = "flow.over";
 const BONUS = "flow.bonus";
+const BUYIN = "flow.buyin";
 
 export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
   const game = (): GameState => host.state.game!;
@@ -120,12 +160,53 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
     serve();
   };
 
+  /** Puts `score` on a board, highest first; returns its rank from 1, or 0 when it does not make it. */
+  const place = (board: number[], score: number): number => {
+    const size = cfg.boardSize ?? DEFAULT_BOARD;
+    if (score <= 0) return 0;
+    let i = 0;
+    while (i < board.length && board[i]! >= score) i++;
+    if (i >= size) return 0;
+    board.splice(i, 0, score);
+    if (board.length > size) board.length = size;
+    return i + 1;
+  };
+
+  const credit = (n: number): void => {
+    game().credits += n;
+    credits();
+  };
+
   const gameOver = (): void => {
     const g = game();
+    const score = host.state.player.score;
     g.phase = "over";
     host.reset(true); // the game is done: no mode, timer or lamp of the last ball goes on into attract
-    host.emit({ c: "gameOver", score: host.state.player.score, bought: g.bought });
-    host.setTimer(OVER, cfg.overTicks);
+    // bought-in balls continue the game: their score goes to the bought board, the main board is not touched twice.
+    // A bought ball earns no board credit; the replay credit, once a game, can still be reached on them.
+    const board = g.bought ? "bought" : "main";
+    const rank = place(g.board[board], score);
+    if (rank > 0) host.emit({ c: "hiscore", board, score, rank });
+    if (rank > 0 && board === "main" && cfg.highScoreCredit) credit(1);
+    host.emit({ c: "gameOver", score, bought: g.bought });
+    if (cfg.buyIn && !g.bought && g.credits >= cfg.buyIn.cost) {
+      g.phase = "buyin";
+      host.setTimer(BUYIN, cfg.buyIn.windowTicks);
+    } else {
+      host.setTimer(OVER, cfg.overTicks);
+    }
+  };
+
+  /** The player spends credits on more balls: the game goes on with the same score. */
+  const buyIn = (): void => {
+    const g = game();
+    const offer = cfg.buyIn!;
+    host.clearTimer(BUYIN);
+    g.credits -= offer.cost;
+    g.bought = true;
+    g.shootAgain = offer.balls - 1; // the first bought ball is served now
+    credits();
+    serve();
   };
 
   /** The last ball is gone: saved, or the bonus is paid and shown. */
@@ -142,6 +223,17 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
     g.phase = "bonus";
     host.setTimer(BONUS, cfg.bonusTicks); // first: a bonus function that throws must not leave the game without its way on
     if (!g.tilted) host.awardBonus();
+    scored();
+  };
+
+  /** The replay score pays one credit, once a game; the score only changes in play and while the bonus is added. */
+  const scored = (): void => {
+    const g = game();
+    if (!cfg.replayScore || g.replayDone) return;
+    if (host.state.player.score < cfg.replayScore) return;
+    g.replayDone = true;
+    host.emit({ c: "dmd", show: { id: "replay" } });
+    credit(1);
   };
 
   /** The bonus is shown: an extra ball, the next ball, or the end. */
@@ -167,9 +259,16 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
       if (e.button === "coin") {
         g.credits += 1;
         credits();
-      } else if (e.button === "start" && g.phase === "attract") {
+      } else if (e.button === "start" && (g.phase === "attract" || g.phase === "buyin")) {
+        if (g.phase === "buyin") {
+          // declining the offer: the window closes and the start goes ahead (or asks for a credit)
+          host.clearTimer(BUYIN);
+          g.phase = "attract";
+        }
         if (g.credits >= cfg.startCost) startGame();
         else host.emit({ c: "dmd", show: { id: "insertCoin" } });
+      } else if (e.button === "buyin" && g.phase === "buyin" && cfg.buyIn && g.credits >= cfg.buyIn.cost) {
+        buyIn();
       }
     },
     admits: () => game().phase === "play",
@@ -181,7 +280,7 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
     },
     timer(id) {
       const phase = game().phase;
-      if (id === OVER && phase === "over") game().phase = "attract";
+      if ((id === OVER && phase === "over") || (id === BUYIN && phase === "buyin")) game().phase = "attract";
       else if (id === BONUS && phase === "bonus") afterBonus();
     },
     switchSeen(tick) {
@@ -203,6 +302,10 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
       game().saverWait = false; // started by hand: the ball's first switch does not start it again
       host.state.balls.saver.until = host.now() + ticks;
     },
+    awardCredit(n) {
+      credit(n);
+    },
+    scored,
     phase: () => game().phase,
   };
 }

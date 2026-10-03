@@ -1,7 +1,7 @@
 import { nextRandom } from "./rng";
 import { createState } from "./state";
 import { validateState } from "./serialize";
-import { createFlow, initialGame, validateFlow } from "./flow";
+import { createFlow, initialGame, validateFlow, validateMachine } from "./flow";
 import type { Flow, FlowConfig, Machine } from "./flow";
 import type { Command, Ctx, LitState, ModeDef, RulesEvent, RulesState, Shots, SwitchEvent, TableRules } from "./types";
 
@@ -87,6 +87,7 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
   const shots = opts.shots ?? {};
   for (const [name, list] of Object.entries(shots)) if (list.length === 0) problems.push(`shot "${name}" has no switches`);
   if (opts.flow) problems.push(...validateFlow(opts.flow));
+  if (opts.machine) problems.push(...validateMachine(opts.machine));
   if (opts.machine && !opts.flow) problems.push("machine given without a flow");
   if (opts.machine && opts.state) problems.push("machine and state both given: a saved state already has its credits");
   if (opts.state && opts.flow && opts.state.game === null) problems.push("saved state has no game but the table runs with a flow");
@@ -94,8 +95,8 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
   if (opts.state && opts.flow && opts.state.game) {
     const g = opts.state.game;
     // phases the flow cannot leave would hold a restored game forever
-    if (g.phase === "buyin") problems.push(`saved state is in phase "${g.phase}", which this flow does not run yet`);
-    for (const [phase, timer] of [["over", "flow.over"], ["bonus", "flow.bonus"]] as const) {
+    if (g.phase === "buyin" && !opts.flow.buyIn) problems.push('saved state is in phase "buyin" but the flow offers no buy-in');
+    for (const [phase, timer] of [["over", "flow.over"], ["bonus", "flow.bonus"], ["buyin", "flow.buyin"]] as const) {
       if (g.phase === phase && !Object.hasOwn(opts.state.timers, timer)) problems.push(`saved state is in phase "${phase}" without its ${timer} timer`);
     }
   }
@@ -265,6 +266,10 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
         if (flow) flow.saver(ticks);
         else state.balls.saver.until = ctx.now + ticks;
       },
+      awardCredit(n) {
+        if (!Number.isSafeInteger(n) || n < 1) throw new Error(`game.awardCredit: ${n} is not a whole number of at least 1`);
+        flow?.awardCredit(n);
+      },
     },
     emit: (cmd) => {
       out.push(cmd);
@@ -284,6 +289,10 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
         },
         setTimer(id, ticks) {
           state.timers[id] = { due: ctx.now + ticks };
+          dueKnown = false;
+        },
+        clearTimer(id) {
+          delete state.timers[id];
           dueKnown = false;
         },
         reset(keepPersist) {
@@ -437,6 +446,7 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
       table.onBallStart?.(ctx);
     }
     // button events reach the modes only
+    if (flow) flow.scored();
     if (flow && e.t === "drain") flow.afterDrain();
   };
 
@@ -457,6 +467,7 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
       const e: RulesEvent = t.tag === undefined ? { t: "timer", tick, id } : { t: "timer", tick, id, tag: t.tag };
       toModes(e);
       table.onTimer?.(ctx, id, t.tag);
+      flow?.scored();
     }
   };
 

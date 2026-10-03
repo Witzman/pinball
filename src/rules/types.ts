@@ -37,6 +37,8 @@ export type Command =
   | { c: "credits"; n: number }
   /** A game ended with this score (`bought`: it ended with bought-in balls). */
   | { c: "gameOver"; score: number; bought: boolean }
+  /** A score made a board; `rank` counts from 1. The leaf stores it (see src/app). */
+  | { c: "hiscore"; board: "main" | "bought"; score: number; rank: number }
   | { c: "sound"; play: string; vol?: number };
 
 /** A shot is off, lit, or collected: almost every reward is "light, then collect". */
@@ -138,6 +140,8 @@ export interface Ctx {
     extraBall(): boolean;
     /** The ball saver runs for `ticks` from now: a drain of the last ball in that time serves it again (with a flow only). */
     saver(ticks: number): void;
+    /** Adds `n` credits to the machine (a special, a replay): the credit count is told to the leaves. Nothing without a flow. */
+    awardCredit(n: number): void;
   };
   emit(cmd: Command): void;
   addScore(n: number): void;
