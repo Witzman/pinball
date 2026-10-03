@@ -60,6 +60,9 @@ describe("tilt", () => {
     expect(slow.state.game).toMatchObject({ tiltHeat: 2, tiltAt: 10 });
     slow.at(2010).nudge().run(2011); // one unit cooled: 2 - 1 + 1 = 2, clock moved by one period
     expect(slow.state.game).toMatchObject({ tiltHeat: 2, tiltAt: 2010 });
+    const off = game();
+    off.at(10).nudge().at(2005).nudge().at(2500).nudge().run(2501); // off the boundary: the clock moves to 2010, not to 2500
+    expect(off.state.game).toMatchObject({ tiltHeat: 2, tiltAt: 2010 });
   });
 
   it("a long wait cools everything, and the next nudge starts the clock afresh", () => {
