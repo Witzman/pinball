@@ -75,6 +75,15 @@ export function validateTable(t: TableDef): string[] {
     useSwitch(p.switch, p.shared);
   });
 
+  (t.gates ?? []).forEach((g, i) => {
+    const where = `gate #${i}`;
+    if (!inside(g.a) || !inside(g.b)) fail(`${where}: outside the playfield`);
+    if (g.a[0] === g.b[0] && g.a[1] === g.b[1]) fail(`${where}: zero length`);
+    checkZones(where, [g.zoneA, g.zoneB]);
+    if (g.zoneA === g.zoneB) fail(`${where}: both sides are zone ${g.zoneA}; a gate must join two different zones`);
+    useSwitch(g.switch, g.shared);
+  });
+
   const flipperIds = new Map<string, number>();
   for (const f of t.flippers) {
     const where = `flipper "${f.id}"`;

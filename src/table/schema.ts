@@ -18,6 +18,12 @@ interface WallBase {
   switch?: string;
   /** Set on every collider that deliberately shares one switch name. */
   shared?: boolean;
+  /**
+   * One-way wall: blocks only on the side its normal points to, where the normal
+   * of a segment a->b is (-dy, dx) (a->b pointing left gives a normal pointing up
+   * the table). A ball behind it passes through and cannot come back.
+   */
+  oneWay?: boolean;
 }
 
 export interface SegmentDef extends WallBase {
@@ -50,6 +56,22 @@ export interface PostDef {
   r: number;
   material: string;
   zones?: number[];
+  switch?: string;
+  shared?: boolean;
+}
+
+/**
+ * A height-zone gate, a line a->b. A ball crossing it from the left of a->b (the
+ * side where cross(b - a, p - a) > 0) while in zoneA moves to zoneB, and back.
+ * Walls with `zones` exist only at their height; gates join the heights, so a
+ * ramp is walls in its zone plus a gate at its mouth and one at its exit.
+ */
+export interface GateDef {
+  a: Point;
+  b: Point;
+  zoneA: number;
+  zoneB: number;
+  /** Switch reported on every crossing (direction is in the contact record). */
   switch?: string;
   shared?: boolean;
 }
@@ -94,6 +116,7 @@ export interface TableDef {
   materials: Record<string, Material>;
   walls: WallDef[];
   posts: PostDef[];
+  gates?: GateDef[];
   flippers: FlipperDef[];
   plunger?: PlungerDef;
   /** Named shots: ordered lists of switch names the rules treat as one shot. */

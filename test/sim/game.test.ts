@@ -126,4 +126,15 @@ describe("snapshot", () => {
     expect(s.plunger).toMatchObject({ x: expect.any(Number), halfWidth: expect.any(Number) });
     expect(JSON.parse(JSON.stringify(s))).toEqual(s);
   });
+
+  it("keeps a ball that has left the plunger lane from rolling back down it", () => {
+    const g = createGame(demoTable);
+    const b = g.table.world.balls[0]!;
+    b.x = 0.499;
+    b.y = 0.26; // in the lane, above the one-way flap at y = 300 mm
+    b.vy = 1;
+    for (let i = 0; i < 40; i++) advance(g, 49);
+    expect(b.y).toBeLessThan(0.3);
+    expect(b.y).toBeGreaterThan(0.25);
+  });
 });
