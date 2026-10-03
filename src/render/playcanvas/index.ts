@@ -5,6 +5,7 @@ import type { Renderer } from "../renderer";
 import { backglassTexture, drawDisplay, glowTexture, playfieldTexture, studioSky } from "./art";
 import { fitDistance } from "./frame";
 import { rampGeometry } from "./ramp";
+import rampPlasticUrl from "./assets/ramp-plastic.webp";
 import type { MeshData } from "./ramp";
 
 // The PlayCanvas renderer (issue #45): the same Renderer interface as the canvas placeholder,
@@ -115,6 +116,20 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     hole: material({ diffuse: [0.02, 0.02, 0.02], metal: 0, gloss: 0.2 }),
     plastic: material({ diffuse: [0.55, 0.78, 1], opacity: 0.45, metal: 0, gloss: 0.97 }),
   };
+  // the printed ramp plastic (an asset, #45): until it has loaded, or when it fails, the plain tinted plastic stays
+  const rampImage = new Image();
+  rampImage.onload = () => {
+    const t = new pc.Texture(app.graphicsDevice, { width: rampImage.width, height: rampImage.height, format: pc.PIXELFORMAT_SRGBA8, mipmaps: true, minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR, magFilter: pc.FILTER_LINEAR, addressU: pc.ADDRESS_CLAMP_TO_EDGE, addressV: pc.ADDRESS_REPEAT });
+    t.setSource(rampImage);
+    const m = mats.plastic;
+    m.diffuse = color(1, 1, 1);
+    m.diffuseMap = t;
+    m.opacityMap = t;
+    m.opacityMapChannel = "a";
+    m.opacity = 0.9;
+    m.update();
+  };
+  rampImage.src = rampPlasticUrl;
   const glowTex = texture(app.graphicsDevice, glowTexture(), false);
   /** An additive glow: light on the playfield that does not hide what is under it. */
   const glowMaterial = (rgb: [number, number, number], intensity: number): pc.StandardMaterial => {
@@ -366,6 +381,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     const mesh = new pc.Mesh(app.graphicsDevice);
     mesh.setPositions(m.positions);
     mesh.setNormals(m.normals);
+    mesh.setUvs(0, m.uvs);
     mesh.setIndices(m.indices);
     mesh.update();
     return mesh;
