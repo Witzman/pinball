@@ -61,6 +61,19 @@ export function validateFlow(cfg: FlowConfig): string[] {
   return errs;
 }
 
+/** Problems with a machine's saved state, which may come from untrusted storage; empty when fine. */
+export function validateMachine(m: Machine): string[] {
+  const errs: string[] = [];
+  if (!Number.isSafeInteger(m.credits) || m.credits < 0) errs.push(`machine.credits must be a whole number, 0 or more, got ${m.credits}`);
+  for (const name of ["main", "bought"] as const) {
+    const b = m.boards?.[name];
+    if (!Array.isArray(b) || !b.every((x) => Number.isSafeInteger(x) && x >= 0) || !b.every((x, i) => i === 0 || b[i - 1]! >= x)) {
+      errs.push(`machine.boards.${name} must be a list of scores, whole numbers, highest first`);
+    }
+  }
+  return errs;
+}
+
 export function initialGame(cfg: FlowConfig, machine?: Machine): GameState {
   return {
     phase: "attract",
@@ -169,7 +182,8 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
     const score = host.state.player.score;
     g.phase = "over";
     host.reset(true); // the game is done: no mode, timer or lamp of the last ball goes on into attract
-    // bought-in balls continue the game: their score goes to the bought board, the main board is not touched twice
+    // bought-in balls continue the game: their score goes to the bought board, the main board is not touched twice.
+    // A bought ball earns no board credit; the replay credit, once a game, can still be reached on them.
     const board = g.bought ? "bought" : "main";
     const rank = place(g.board[board], score);
     if (rank > 0) host.emit({ c: "hiscore", board, score, rank });
@@ -245,7 +259,12 @@ export function createFlow(cfg: FlowConfig, host: FlowHost): Flow {
       if (e.button === "coin") {
         g.credits += 1;
         credits();
-      } else if (e.button === "start" && g.phase === "attract") {
+      } else if (e.button === "start" && (g.phase === "attract" || g.phase === "buyin")) {
+        if (g.phase === "buyin") {
+          // declining the offer: the window closes and the start goes ahead (or asks for a credit)
+          host.clearTimer(BUYIN);
+          g.phase = "attract";
+        }
         if (g.credits >= cfg.startCost) startGame();
         else host.emit({ c: "dmd", show: { id: "insertCoin" } });
       } else if (e.button === "buyin" && g.phase === "buyin" && cfg.buyIn && g.credits >= cfg.buyIn.cost) {

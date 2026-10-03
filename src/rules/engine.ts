@@ -1,7 +1,7 @@
 import { nextRandom } from "./rng";
 import { createState } from "./state";
 import { validateState } from "./serialize";
-import { createFlow, initialGame, validateFlow } from "./flow";
+import { createFlow, initialGame, validateFlow, validateMachine } from "./flow";
 import type { Flow, FlowConfig, Machine } from "./flow";
 import type { Command, Ctx, LitState, ModeDef, RulesEvent, RulesState, Shots, SwitchEvent, TableRules } from "./types";
 
@@ -87,6 +87,7 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
   const shots = opts.shots ?? {};
   for (const [name, list] of Object.entries(shots)) if (list.length === 0) problems.push(`shot "${name}" has no switches`);
   if (opts.flow) problems.push(...validateFlow(opts.flow));
+  if (opts.machine) problems.push(...validateMachine(opts.machine));
   if (opts.machine && !opts.flow) problems.push("machine given without a flow");
   if (opts.machine && opts.state) problems.push("machine and state both given: a saved state already has its credits");
   if (opts.state && opts.flow && opts.state.game === null) problems.push("saved state has no game but the table runs with a flow");

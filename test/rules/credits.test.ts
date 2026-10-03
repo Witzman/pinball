@@ -238,11 +238,27 @@ describe("buy-in", () => {
     expect(h.state.game!.credits).toBe(credits);
   });
 
-  it("ignores the buy-in button outside the window, and a start inside it", () => {
+  it("lets a start inside the window decline the offer and begin the next game", () => {
     const h = toBuyIn(5);
+    const credits = h.state.game!.credits;
     at += 1;
     h.at(at).button("start", true).run(at);
+    expect(h.state.game).toMatchObject({ phase: "play", credits: credits - 1, bought: false });
+    expect(h.state.timers).toEqual({});
+    expect(h.state.player).toMatchObject({ score: 0, ballNo: 1 });
+  });
+
+  it("asks for a credit when the player declines without having one", () => {
+    const h = toBuyIn(5, { buyIn: { cost: 1, balls: 1, windowTicks: 500 }, startCost: 5, startCredits: 5 }, { credits: 5, boards: { main: [], bought: [] } });
     expect(h.state.game!.phase).toBe("buyin");
+    h.take();
+    at += 1;
+    h.at(at).button("start", true).run(at);
+    expect(h.state.game).toMatchObject({ phase: "attract" });
+    expect(h.cmds).toEqual([{ c: "dmd", show: { id: "insertCoin" } }]);
+  });
+
+  it("ignores the buy-in button outside the window", () => {
     const attract = harness(table, { flow: cfg });
     attract.at(1).button("buyin", true).run(2);
     expect(attract.state.game).toMatchObject({ phase: "attract", credits: 3, bought: false });
@@ -277,6 +293,48 @@ describe("buy-in", () => {
     delete s.timers["flow.buyin"];
     expect(() => createRules(table, { seed: 1, flow: { ...cfg }, state: s })).toThrow(/"buyin" without its flow.buyin timer/);
     expect(() => createRules(table, { seed: 1, flow: { ...cfg, buyIn: undefined }, state: restore(serialize(h.state)) })).toThrow(/offers no buy-in/);
+  });
+});
+
+describe("buy-in and extra balls, small boards", () => {
+  it("lets an extra ball awarded on a bought ball be served, within the game's extra-ball limit", () => {
+    const give: TableRules = { modes: {}, onSwitch: (c, e) => { if (e.sw === "p") c.addScore(100); if (e.sw === "extra") c.game.extraBall(); } };
+    const h = harness(give, { flow: { ...cfg, replayScore: 0, extraBallMax: 1, buyIn: { cost: 1, balls: 1, windowTicks: 500 } }, machine: { credits: 9, boards: { main: [], bought: [] } } });
+    h.at(1).button("start", true).at(2).ballAtPlunger().at(3).hit("p").at(5).drain().run(30);
+    h.at(31).ballAtPlunger().at(33).drain().run(60);
+    h.at(61).ballAtPlunger().at(63).drain().run(90);
+    expect(h.state.game!.phase).toBe("buyin");
+    h.at(91).button("buyin", true).at(92).ballAtPlunger().at(93).hit("extra").at(95).drain().run(120);
+    expect(h.state.game).toMatchObject({ phase: "play", bought: true, shootAgain: 0, extraBalls: 1 }); // the extra ball is being served
+    h.at(121).ballAtPlunger().at(123).drain().run(150);
+    expect(h.state.game!.phase).toBe("over"); // the bought ball and its extra ball are done
+  });
+
+  it("keeps one score when the board has one place", () => {
+    const h = started({ replayScore: 0, boardSize: 1, buyIn: undefined }, { credits: 5, boards: { main: [400], bought: [] } });
+    scoreAndPlayOut(h, "p", 5); // 500 beats 400
+    nextBall(h);
+    nextBall(h);
+    endGame(h);
+    expect(h.state.game!.board.main).toEqual([500]);
+    expect(cmds(h, "hiscore")).toEqual([{ c: "hiscore", board: "main", score: 500, rank: 1 }]);
+  });
+});
+
+describe("a machine from storage", () => {
+  const make = (m: unknown) => () => createRules(table, { seed: 1, flow: cfg, machine: m as never });
+
+  it("refuses credits and boards that are not whole numbers or not in order", () => {
+    const ok = { credits: 1, boards: { main: [3, 2], bought: [] } };
+    expect(make(ok)).not.toThrow();
+    expect(make({ ...ok, credits: -1 })).toThrow(/machine.credits/);
+    expect(make({ ...ok, credits: 1.5 })).toThrow(/machine.credits/);
+    expect(make({ ...ok, credits: Number.NaN })).toThrow(/machine.credits/);
+    expect(make({ ...ok, boards: { main: [2, 3], bought: [] } })).toThrow(/machine.boards.main/);
+    expect(make({ ...ok, boards: { main: [], bought: [-1] } })).toThrow(/machine.boards.bought/);
+    expect(make({ ...ok, boards: { main: [1.5], bought: [] } })).toThrow(/machine.boards.main/);
+    expect(make({ ...ok, boards: { main: [] } })).toThrow(/machine.boards.bought/);
+    expect(make({ credits: 1 })).toThrow(/machine.boards.main/);
   });
 });
 
