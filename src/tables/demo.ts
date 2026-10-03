@@ -20,7 +20,7 @@ export const demoTable: TableDef = {
     // plunger lane, open at the top
     { type: "segment", a: [483, 1045], b: [483, 250], material: "metal" },
     // one-way flap across the lane: the ball goes up through it and cannot roll back down
-    { type: "segment", a: [515, 300], b: [483, 300], material: "metal", oneWay: true },
+    { type: "segment", a: [515, 205], b: [483, 250], material: "metal", oneWay: true },
     // deflector at the top of the lane: steers the ball left, into the playfield
     { type: "segment", a: [420, 30], b: [515, 125], material: "metal" },
     // a standup target

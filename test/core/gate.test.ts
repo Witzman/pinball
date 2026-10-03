@@ -123,6 +123,37 @@ describe("zone gates", () => {
   });
 });
 
+describe("gate edge cases", () => {
+  it("applies two gates crossed in one tick in array order", () => {
+    // zone 0 -> 1 at y = 0.5, then 1 -> 2 at y = 0.49; a fast ball crosses both in one tick
+    const g1 = gate({ ay: 0.5, by: 0.5, zoneA: 0, zoneB: 1 });
+    const g2 = gate({ ay: 0.49, by: 0.49, zoneA: 1, zoneB: 2 });
+    const w = falling(0.2, 0.505, -20, 0, [g1, g2]); // 2 cm per tick
+    step(w);
+    expect(w.balls[0]!.zone).toBe(2);
+    const reversed = falling(0.2, 0.505, -20, 0, [g2, g1]);
+    step(reversed);
+    expect(reversed.balls[0]!.zone).toBe(1); // g2 saw zone 0 first and did nothing
+  });
+
+  it("does nothing to a ball that rests exactly on the line", () => {
+    const w = createWorld({ balls: [ball({ x: 0.2, y: 0.5 })], segments: [], circles: [], gates: [gate()], gravity: 0 });
+    play(w, 100);
+    expect(w.balls[0]!.zone).toBe(0);
+  });
+
+  it("crosses exactly once when a tick ends on the line and the next leaves it", () => {
+    const w = falling(0.2, 0.5005, -1, 0, [gate({ sw: 3 })]);
+    let events = 0;
+    for (let i = 0; i < 5; i++) {
+      step(w);
+      events += w.contacts.n;
+    }
+    expect(events).toBe(1);
+    expect(w.balls[0]!.zone).toBe(1);
+  });
+});
+
 describe("one-way walls", () => {
   // Wall along y = 0.5, x 0..0.5, a->b pointing left: normal (-dy, dx) = (0, -0.5): up the table.
   const oneWay = wall(0.5, 0.5, 0, 0.5, { oneWay: true });

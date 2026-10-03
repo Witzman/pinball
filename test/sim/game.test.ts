@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advance, createGame, setPaused, snapshot } from "../../src/sim/game";
+import { advance, createGame, setPaused, snapshot, tick } from "../../src/sim/game";
 import { demoTable } from "../../src/tables/demo";
 import { hashWorld } from "../../src/core/hash";
 
@@ -131,10 +131,29 @@ describe("snapshot", () => {
     const g = createGame(demoTable);
     const b = g.table.world.balls[0]!;
     b.x = 0.499;
-    b.y = 0.26; // in the lane, above the one-way flap at y = 300 mm
+    b.y = 0.19; // in the lane, above the one-way flap (it slopes from (515, 205) down to (483, 250) mm)
     b.vy = 1;
-    for (let i = 0; i < 40; i++) advance(g, 49);
-    expect(b.y).toBeLessThan(0.3);
-    expect(b.y).toBeGreaterThan(0.25);
+    let lowestInLane = 0;
+    for (let i = 0; i < 40; i++) {
+      advance(g, 49);
+      if (b.x > 0.487 && b.y > lowestInLane) lowestInLane = b.y;
+    }
+    expect(lowestInLane).toBeLessThan(0.23); // never below the flap while still in the lane
+    expect(b.x).toBeLessThan(0.487); // it rolled off the flap into the playfield
+  });
+
+  it("never leaves the ball resting on the lane flap, whatever the plunger power", () => {
+    // Regression for a flat flap: a mid-power launch that cleared the flap but not the
+    // lane top fell back onto it and stayed there forever.
+    for (let hold = 60; hold <= 420; hold += 20) {
+      const g = createGame(demoTable);
+      for (let t = 0; t < 20000; t++) {
+        g.input.plunge = t >= 300 && t < 300 + hold;
+        tick(g);
+      }
+      const b = g.table.world.balls[0]!;
+      const inLanePocket = b.x > 0.485 && b.y > 0.2 && b.y < 0.31;
+      expect(inLanePocket, `plunger held ${hold} ms, ball ended at (${b.x}, ${b.y})`).toBe(false);
+    }
   });
 });

@@ -116,7 +116,10 @@ export interface Plunger {
  * A height-zone gate: a line a->b. A ball whose path crosses it from the left
  * of a->b (cross(b - a, p - a) > 0, side A) to the right (side B) and is in
  * `zoneA` moves to `zoneB`; crossing back from B in `zoneB` moves it to `zoneA`.
- * Ramp mouths and exits are gates.
+ * Ramp mouths and exits are gates. The crossing is tested on the straight line
+ * from where the ball was at the start of the tick to where it ends it, and the
+ * zone changes at the end of the tick: a bounce next to a gate within one tick
+ * can misjudge it by a few millimetres.
  */
 export interface Gate {
   ax: number;
