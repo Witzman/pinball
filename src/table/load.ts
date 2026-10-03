@@ -26,7 +26,7 @@ export interface LoadedTable {
   /** Sound class per switch name (#15); empty without `TableDef.sounds`. */
   sounds: Record<string, SoundClass>;
   /** Drawn ramps (#21), metres. */
-  ramps: { zone: number; path: { x: number; y: number }[]; width: number }[];
+  ramps: { zone: number; path: { x: number; y: number }[]; width: number; /** Height of the ball level at each path point, metres. */ heights: number[] }[];
 }
 
 const MM = 1 / 1000;
@@ -124,7 +124,7 @@ export function loadTable(def: TableDef): LoadedTable {
     : null;
 
   const world = createWorld({ balls: [], segments, circles, gates, triggers, magnets, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg), kickWait: new Int32Array(kickers) });
-  return { world, flipperIds: def.flippers.map((f) => f.id), flipperInputs: def.flippers.map((f) => f.input ?? (f.id === "left" || f.id === "right" ? f.id : null)), triggerIds: (def.triggers ?? []).map((t) => t.id), magnetIds: (def.magnets ?? []).map((m) => m.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM, heights: (def.visual?.heights ?? []).map((h) => h * MM), sounds: { ...(def.sounds ?? {}) }, ramps: (def.visual?.ramps ?? []).map((r) => ({ zone: r.zone, path: r.path.map((q) => ({ x: q[0] * MM, y: q[1] * MM })), width: r.width * MM })) };
+  return { world, flipperIds: def.flippers.map((f) => f.id), flipperInputs: def.flippers.map((f) => f.input ?? (f.id === "left" || f.id === "right" ? f.id : null)), triggerIds: (def.triggers ?? []).map((t) => t.id), magnetIds: (def.magnets ?? []).map((m) => m.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM, heights: (def.visual?.heights ?? []).map((h) => h * MM), sounds: { ...(def.sounds ?? {}) }, ramps: (def.visual?.ramps ?? []).map((r) => ({ zone: r.zone, path: r.path.map((q) => ({ x: q[0] * MM, y: q[1] * MM })), width: r.width * MM, heights: (r.heights ?? r.path.map(() => def.visual?.heights?.[r.zone] ?? 0)).map((h) => h * MM) })) };
 }
 
 /** A resting ball at (x, y) millimetres on the playfield. */

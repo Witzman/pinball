@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { advance, createGame } from "../../src/sim/game";
 import { cameraFor, tiltedCamera, topCamera } from "../../src/sim/camera";
-import { buildScene, snapshot } from "../../src/sim/snapshot";
+import { ballHeight, buildScene, snapshot } from "../../src/sim/snapshot";
 import { demoTable } from "../../src/tables/demo";
 import { tableSetups } from "../../src/tables";
 
@@ -141,17 +141,20 @@ describe("height", () => {
     expect(g.table.ramps[0]!.path[0]!.x).toBe(0.07); // a copy
   });
 
-  it("a ball rolled up the ramp is in zone 1 at the height of zone 1, and back at 0 after the exit", () => {
+  it("a ball rolled up the ramp climbs: its height follows its place along the ramp, from the mouth up to the exit, and is 0 on the playfield again after it", () => {
     const { g, b } = onRamp();
-    let top = 0;
-    for (let i = 0; i < 400 && b.zone === 0; i++) advance(g, 1);
-    expect(b.zone).toBe(1);
-    expect(snapshot(g).balls[0]).toMatchObject({ zone: 1, z: 0.03 });
-    top = snapshot(g).balls[0]!.z;
-    for (let i = 0; i < 1500 && b.zone === 1; i++) advance(g, 1);
+    const zs: number[] = [];
+    for (let i = 0; i < 1500 && !(b.zone === 0 && zs.length > 0); i++) {
+      advance(g, 1);
+      if (b.zone === 1) zs.push(snapshot(g).balls[0]!.z);
+    }
+    expect(zs.length).toBeGreaterThan(20);
+    for (let i = 1; i < zs.length; i++) expect(zs[i]!, `step ${i}`).toBeGreaterThanOrEqual(zs[i - 1]! - 1e-9); // it only climbs on the way up (the ball is slowing, never rolling back here)
+    expect(zs[0]!).toBeLessThan(0.012); // starts near the mouth, low
+    expect(Math.max(...zs)).toBeGreaterThan(0.03); // and gets high near the top
+    expect(Math.max(...zs)).toBeLessThanOrEqual(0.048 + 1e-9);
     expect(b.zone).toBe(0);
     expect(snapshot(g).balls[0]!.z).toBe(0);
-    expect(top).toBeGreaterThan(0);
   });
 
   it("a zone without a height reads as 0, so a table with no visual still snapshots", () => {
@@ -185,5 +188,26 @@ describe("camera", () => {
     expect(snapshot(g, [], "tilted").camera).toEqual(tiltedCamera(g.table.playfieldWidth, g.table.playfieldLength, b));
     expect(cameraFor("top", 1, 2, null).mode).toBe("top");
     expect(cameraFor("tilted", 1, 2, null).mode).toBe("tilted");
+  });
+});
+
+describe("ballHeight", () => {
+  it("interpolates along the nearest part of the ramp and does not go past its ends", () => {
+    const g = createGame(demoTable);
+    const t = g.table;
+    // the demo ramp: from (0.07, 0.6) at 0 up to (0.07, 0.3) at 0.048 m
+    const at = (y: number, x = 0.07) => ballHeight(t, { x, y, zone: 1 });
+    expect(at(0.6)).toBeCloseTo(0, 12);
+    expect(at(0.45)).toBeCloseTo(0.024, 12);
+    expect(at(0.3)).toBeCloseTo(0.048, 12);
+    expect(at(0.7)).toBeCloseTo(0, 12); // before the mouth: clamped
+    expect(at(0.1)).toBeCloseTo(0.048, 12); // past the exit: clamped
+    expect(at(0.45, 0.2)).toBeCloseTo(0.024, 12); // to the side: the nearest point of the path
+  });
+
+  it("is the height of the zone for the playfield and for a zone with no ramp", () => {
+    const t = createGame(demoTable).table;
+    expect(ballHeight(t, { x: 0.07, y: 0.45, zone: 0 })).toBe(0);
+    expect(ballHeight(t, { x: 0.07, y: 0.45, zone: 5 })).toBe(0);
   });
 });

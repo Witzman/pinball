@@ -43,7 +43,7 @@ export const demoTable: TableDef = {
     { a: [40, 600], b: [100, 600], zoneA: 0, zoneB: 1 },
     { a: [40, 300], b: [100, 300], zoneA: 1, zoneB: 0 },
   ],
-  visual: { heights: [0, 30], ramps: [{ zone: 1, path: [[70, 600], [70, 300]], width: 60 }] },
+  visual: { heights: [0, 30], ramps: [{ zone: 1, path: [[70, 600], [70, 300]], width: 60, heights: [0, 48] }] },
   plunger: { at: [499, 1030], dirDeg: -90, width: 32, stroke: 80, maxSpeed: 5, pullSpeed: 0.2, material: "plunger" },
   flippers: [
     { id: "left", pivot: [150, 900], length: 60, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber" },

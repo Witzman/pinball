@@ -61,7 +61,7 @@ export interface StaticScene {
   triggers: { id: string; x: number; y: number; r: number; hold: boolean }[];
   /** Height of each zone's level above the playfield, metres. */
   heights: number[];
-  ramps: { zone: number; path: { x: number; y: number }[]; width: number }[];
+  ramps: { zone: number; path: { x: number; y: number }[]; width: number; /** Height of the ball level at each path point, metres. */ heights: number[] }[];
 }
 
 
@@ -74,8 +74,37 @@ export function buildScene(table: LoadedTable): StaticScene {
     posts: w.circles.map((c) => ({ x: c.x, y: c.y, r: c.r, kind: c.sw > 0 ? "switch" : "post", zoneMask: c.zoneMask })),
     triggers: w.triggers.map((t, i) => ({ id: table.triggerIds[i]!, x: t.x, y: t.y, r: t.r, hold: t.hold })),
     heights: [...table.heights],
-    ramps: table.ramps.map((r) => ({ zone: r.zone, width: r.width, path: r.path.map((q) => ({ ...q })) })),
+    ramps: table.ramps.map((r) => ({ zone: r.zone, width: r.width, path: r.path.map((q) => ({ ...q })), heights: [...r.heights] })),
   };
+}
+
+/**
+ * How high a ball in the ramp zone is: along the ramp whose centre line is nearest to it, the
+ * height interpolated between the path points (a ramp that rises lifts the ball smoothly);
+ * a ball on the playfield, or in a zone without a ramp, is at the height of its zone.
+ */
+export function ballHeight(table: LoadedTable, b: { x: number; y: number; zone: number }): number {
+  const flat = table.heights[b.zone] ?? 0;
+  if (b.zone === 0) return flat;
+  let best = Infinity;
+  let h = flat;
+  for (const r of table.ramps) {
+    if (r.zone !== b.zone) continue;
+    for (let i = 1; i < r.path.length; i++) {
+      const a = r.path[i - 1]!;
+      const c = r.path[i]!;
+      const dx = c.x - a.x;
+      const dy = c.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((b.x - a.x) * dx + (b.y - a.y) * dy) / len2));
+      const d2 = (b.x - (a.x + t * dx)) ** 2 + (b.y - (a.y + t * dy)) ** 2;
+      if (d2 < best) {
+        best = d2;
+        h = r.heights[i - 1]! + (r.heights[i]! - r.heights[i - 1]!) * t;
+      }
+    }
+  }
+  return h;
 }
 
 /** A copy of the moment: nothing in it points into the game. `hudLines` is what the app wants on screen; `cameraMode` picks the view. */
@@ -87,7 +116,7 @@ export function snapshot(g: Game, hudLines: readonly string[] = [], cameraMode: 
     tick: w.tick,
     paused: g.paused,
     broken: g.broken !== null,
-    balls: w.balls.map((b, id) => ({ id, x: b.x, y: b.y, r: b.r, vx: b.vx, vy: b.vy, w: b.w, zone: b.zone, z: g.table.heights[b.zone] ?? 0 })),
+    balls: w.balls.map((b, id) => ({ id, x: b.x, y: b.y, r: b.r, vx: b.vx, vy: b.vy, w: b.w, zone: b.zone, z: ballHeight(g.table, b) })),
     flippers: w.flippers.map((f) => ({ px: f.px, py: f.py, tx: f.tx, ty: f.ty, dx: f.dx, dy: f.dy, k: f.k, cs: f.cs, r0: f.r0, r1: f.r1, up: f.on })),
     plunger: p ? { x: p.x, y: p.y, dirx: p.dirx, diry: p.diry, halfWidth: p.halfWidth, pos: p.pos } : null,
     magnets: w.magnets.map((m) => ({ x: m.x, y: m.y, r: m.r, on: m.on })),

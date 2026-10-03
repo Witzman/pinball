@@ -21,7 +21,7 @@ describe("visual heights and ramps", () => {
   it("load into metres", () => {
     const t = loadTable(demoTable);
     expect(t.heights).toEqual([0, 0.03]);
-    expect(t.ramps).toEqual([{ zone: 1, width: 0.06, path: [{ x: 0.07, y: 0.6 }, { x: 0.07, y: 0.3 }] }]);
+    expect(t.ramps).toEqual([{ zone: 1, width: 0.06, path: [{ x: 0.07, y: 0.6 }, { x: 0.07, y: 0.3 }], heights: [0, 0.048] }]);
   });
 
   it("reject a playfield that is not at height 0", () => {
@@ -47,5 +47,20 @@ describe("visual heights and ramps", () => {
     expect(ramp((r) => void (r.path = [[70, 600], [-100, 300]]))).toMatch(/outside the playfield/);
     expect(ramp((r) => void (r.width = 0))).toMatch(/width must be positive/);
     expect(ramp((r) => void (r.width = 9999))).toMatch(/fit the playfield/);
+  });
+
+  it("give a ramp without a height profile the height of its zone at every point, and a ramp with one its own", () => {
+    const flat = loadTable(patched((x) => void delete x.visual!.ramps![0]!.heights));
+    expect(flat.ramps[0]!.heights).toEqual([0.03, 0.03]);
+    expect(loadTable(demoTable).ramps[0]!.heights).toEqual([0, 0.048]);
+  });
+
+  it("reject a height profile that does not have one value for each path point, or a value that is negative or not a number", () => {
+    const heights = (h: number[]) => problems(patched((x) => void (x.visual!.ramps![0]!.heights = h)));
+    expect(heights([0])).toMatch(/one value for each of the 2 path points/);
+    expect(heights([0, 10, 20])).toMatch(/one value for each of the 2 path points/);
+    expect(heights([0, -1])).toMatch(/every height must be a number >= 0/);
+    expect(heights([0, NaN])).toMatch(/every height must be a number >= 0/);
+    expect(heights([0, 48])).toBe("");
   });
 });
