@@ -4,7 +4,7 @@ import { validateFlow } from "../../src/rules";
 import { advance, createGame, tick } from "../../src/sim/game";
 import { allTables, tableSetups } from "../../src/tables";
 import { colonyTable } from "../../src/tables/colony";
-import { KICK_ONLY, MAX_SCORE, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
+import { CHAMBER_HOLD, CHAMBER_POINTS, KICK_ONLY, MAX_SCORE, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
 import { colonyFlow, colonyRules } from "../../src/tables/colony-rules";
 import { harness } from "../rules/harness";
 
@@ -153,7 +153,7 @@ describe("the skill shot", () => {
 
   it("has points for every switch of the table except the skill lanes (they pay the skill shot) and the kickback lane", () => {
     const all = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : [])), ...(colonyTable.gates ?? []).flatMap((g) => (g.switch ? [g.switch] : []))];
-    const paid = all.filter((sw) => !sw.startsWith("skill") && sw !== "kickbackL" && !/^(leaf|root)(Enter|Exit)$/.test(sw)).sort(); // the ramps pay for the shot, not for the gates
+    const paid = all.filter((sw) => !sw.startsWith("skill") && sw !== "kickbackL" && !/^(leaf|root)(Enter|Exit)$/.test(sw) && !Object.hasOwn(CHAMBER_POINTS, sw)).sort(); // the ramps pay for the shot, not for the gates
     expect(Object.keys(SWITCH_POINTS).sort()).toEqual(paid);
     // the placeholders as they are now: a change is deliberate
     expect(SWITCH_POINTS).toEqual({ slingL: 10_000, slingR: 10_000, inL: 25_000, inR: 25_000, outL: 5_000, outR: 5_000, bumper1: 5_000, bumper2: 5_000, bumper3: 5_000, scout: 50_000, rollW: 10_000, rollO: 10_000, rollR: 10_000 });
@@ -234,6 +234,55 @@ describe("the skill shot", () => {
     const l = lit(h)[0]!;
     h.at(10).hit("outL", 0, "trigger").at(20).hit(l).run(21);
     expect(score(h)).toBe(SWITCH_POINTS.outL);
+  });
+});
+
+describe("the chambers (step 3b)", () => {
+  it("pins the placeholders: what a chamber pays and how long it holds the ball", () => {
+    expect(CHAMBER_POINTS).toEqual({ brood: 100_000, queen: 150_000, mushroom: 100_000 });
+    expect(CHAMBER_HOLD).toBe(700);
+    for (const p of Object.values(CHAMBER_POINTS)) expect(p).toBeLessThan(SKILL_SHOT);
+  });
+
+  it("is one sinkhole of the table for each chamber, with its name as the switch, and a shot for it", () => {
+    for (const id of Object.keys(CHAMBER_POINTS)) {
+      const t = (colonyTable.triggers ?? []).find((x) => x.id === id);
+      expect(t?.switch, id).toBe(id);
+      expect(t?.hold, id).toBeDefined();
+    }
+    expect(colonyTable.shots.broodChamber).toEqual(["brood"]);
+    expect(colonyTable.shots.queensChamber).toEqual(["queen"]);
+    expect(colonyTable.shots.mushroomHole).toEqual(["mushroom"]);
+  });
+
+  it("locks the ball a chamber captured, pays for it, and lets it go after the hold time", () => {
+    for (const [id, points] of Object.entries(CHAMBER_POINTS)) {
+      const h = ball();
+      const before = score(h);
+      h.at(10).hit(id, 0, "capture").run(11);
+      expect(h.cmds, id).toContainEqual({ c: "lockBall", ball: 0, lock: id });
+      expect(score(h) - before, id).toBe(points);
+      h.run(10 + CHAMBER_HOLD - 1);
+      expect(h.cmds.some((c) => c.c === "releaseBall"), `${id}: not yet`).toBe(false);
+      h.run(10 + CHAMBER_HOLD + 2);
+      expect(h.cmds, id).toContainEqual({ c: "releaseBall", lock: id });
+    }
+  });
+
+  it("closes the skill shot like any other switch, and ignores a chamber switch that is not a capture", () => {
+    const h = ball();
+    const l = lit(h)[0]!;
+    h.at(10).hit("queen", 0, "hit").run(11);
+    expect(h.cmds.some((c) => c.c === "lockBall")).toBe(false);
+    expect(h.state.lamps[l]).toBe("off");
+  });
+
+  it("lets a ball go once: nothing is released twice, and a held ball is not held again after it left", () => {
+    const h = ball();
+    h.at(10).hit("mushroom", 0, "capture").run(10 + CHAMBER_HOLD + 2);
+    h.take();
+    h.run(10 + 3 * CHAMBER_HOLD);
+    expect(h.cmds.some((c) => c.c === "releaseBall")).toBe(false);
   });
 });
 

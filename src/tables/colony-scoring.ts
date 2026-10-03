@@ -10,6 +10,10 @@ export const SUPER_SKILL_SHOT = 10_000_000;
 /** A ramp shot: up the Leaf Ramp or the Root Ramp and out at the top (placeholder, a tenth of a skill shot). */
 export const RAMP_SHOT = 100_000;
 
+/** A ball in a chamber (Brood, Queen's, Mushroom): what it pays and how long it sits there before the rules kick it out (ticks, 1 ms each). Placeholders. */
+export const CHAMBER_POINTS: Record<string, number> = { brood: 100_000, queen: 150_000, mushroom: 100_000 };
+export const CHAMBER_HOLD = 700;
+
 /** Points for the small things of the outline; placeholders, far below the scale of a mission. */
 export const SWITCH_POINTS: Record<string, number> = {
   slingL: 10_000,

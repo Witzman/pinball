@@ -61,6 +61,13 @@ export const colonyTable: TableDef = {
     { id: "rollW", at: [190, 120], r: 10, switch: "rollW" },
     { id: "rollO", at: [260, 110], r: 10, switch: "rollO" },
     { id: "rollR", at: [330, 120], r: 10, switch: "rollR" },
+    // the chambers (step 3b): sinkholes a ball sits in until the rules kick it out. Their names are the lock ids and the switches. Placeholders: where they are, how hard they kick.
+    // Brood Chamber, lower left, under the upper flipper; kicks across the table to the right
+    { id: "brood", at: [85, 665], r: 12, switch: "brood", hold: { kickDeg: -25, kickSpeed: 1.8 } },
+    // Queen's Chamber, in the middle under the pop bumpers; kicks up and left into the bumpers
+    { id: "queen", at: [260, 470], r: 12, switch: "queen", hold: { kickDeg: -110, kickSpeed: 1.6 } },
+    // Mushroom Hole, between the two banks of the Fungus Farm (step 4); kicks down towards the flippers
+    { id: "mushroom", at: [244, 555], r: 12, switch: "mushroom", hold: { kickDeg: 100, kickSpeed: 1.2 } },
     // the skill shot: three rollovers up the plunger lane, the harder the pull the further the ball gets
     { id: "skill1", at: [499, 700], r: 10, switch: "skill1" },
     { id: "skill2", at: [499, 500], r: 10, switch: "skill2" },
@@ -88,5 +95,5 @@ export const colonyTable: TableDef = {
     { id: "upperLeft", pivot: [16, 600], length: 58, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber", input: "left" },
   ],
   sounds: { slingL: "sling", slingR: "sling", scout: "target" },
-  shots: { skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"] },
+  shots: { skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"] },
 };
