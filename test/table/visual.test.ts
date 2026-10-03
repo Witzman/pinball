@@ -28,6 +28,11 @@ describe("visual heights and ramps", () => {
     expect(problems(patched((x) => void (x.visual!.heights = [5, 30])))).toMatch(/zone 0 \(the playfield\) must be 0/);
   });
 
+  it("reject more heights than there are zones", () => {
+    expect(problems(patched((x) => void (x.visual!.heights = Array.from({ length: 32 }, () => 0))))).toMatch(/at most 31 heights/);
+    expect(problems(patched((x) => void (x.visual!.heights = Array.from({ length: 31 }, () => 0))))).toBe("");
+  });
+
   it("reject a negative or non-finite height", () => {
     expect(problems(patched((x) => void (x.visual!.heights = [0, -1])))).toMatch(/height of zone 1/);
     expect(problems(patched((x) => void (x.visual!.heights = [0, NaN])))).toMatch(/height of zone 1/);

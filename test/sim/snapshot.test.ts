@@ -128,6 +128,8 @@ describe("height", () => {
     const sc = buildScene(g.table);
     expect(sc.heights).toEqual([0, 0.03]);
     expect(sc.ramps).toEqual(g.table.ramps);
+    sc.heights[1] = 9;
+    expect(g.table.heights[1]).toBe(0.03); // a copy
     sc.ramps[0]!.path[0]!.x = 9;
     expect(g.table.ramps[0]!.path[0]!.x).toBe(0.07); // a copy
   });

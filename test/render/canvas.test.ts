@@ -173,6 +173,16 @@ describe("the canvas renderer", () => {
     expect(log.indexOf("strokeStyle=#9aa6c4")).toBeGreaterThan(band);
   });
 
+  it("draws no ramp band for a table without ramps", () => {
+    const g = createGame(demoTable);
+    const scene = buildScene(g.table);
+    scene.ramps = [];
+    const { ctx, log } = recordingCtx();
+    drawScene(ctx, 600, 900, scene, snapshot(g));
+    expect(log).not.toContain("strokeStyle=rgba(154, 166, 196, 0.18)");
+    expect(log).not.toContain("lineCap=butt");
+  });
+
   it("draws the hud lines of the snapshot", () => {
     const { g, r, log } = setup();
     log.length = 0;
