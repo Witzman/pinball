@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { advance, createGame, takeCommands, tick } from "../../src/sim/game";
+import { advance, createGame, recover, takeCommands, tick } from "../../src/sim/game";
 import type { FlowConfig, TableRules } from "../../src/rules";
 import { demoTable } from "../../src/tables/demo";
 import { saucerTable } from "./fixtures";
+import type { Command } from "../../src/rules";
 
 const flow: FlowConfig = { ballsPerGame: 3, startCost: 1, startCredits: 4, overTicks: 200, saverTicks: 0, bonusTicks: 5, extraBallMax: 0 };
 
@@ -123,6 +124,7 @@ describe("a tick that throws", () => {
       advance(g, 5);
       hitTheTarget(g);
       advance(g, 50);
+      for (let calm = 0; calm < 22; calm++) advance(g, 50); // a calm stretch between errors
     }
     expect(g.errorCount).toBe(13);
     expect(g.errors).toHaveLength(10);
@@ -138,3 +140,66 @@ describe("a tick that throws", () => {
     expect(g.rules.state.game!.phase).toBe("play");
   });
 });
+
+describe("an error that will not go away", () => {
+  const freshGame = () => createGame(demoTable, { rules: fragile, flow: { ...flow, startCost: 0 } });
+  const crash = (g: ReturnType<typeof createGame>) => {
+    g.input.start = true;
+    advance(g, 5);
+    g.input.start = false;
+    advance(g, 5);
+    hitTheTarget(g);
+    advance(g, 50);
+  };
+
+  it("gives up after five errors in a row instead of restarting for ever, and stops the loop", () => {
+    const g = freshGame();
+    for (let i = 0; i < 4; i++) crash(g);
+    expect(g.broken).toBeNull();
+    crash(g);
+    expect(g.broken).toMatch(/too many errors in a row, the last: script bug/);
+    const tickBefore = g.table.world.tick;
+    advance(g, 100);
+    expect(g.table.world.tick).toBe(tickBefore); // nothing runs any more
+    expect(g.accMs).toBe(0);
+  });
+
+  it("forgives errors that are far apart", () => {
+    const g = freshGame();
+    for (let i = 0; i < 9; i++) {
+      crash(g);
+      for (let calm = 0; calm < 22; calm++) advance(g, 50); // more than 1000 good ticks
+    }
+    expect(g.errorCount).toBe(9);
+    expect(g.broken).toBeNull();
+  });
+
+  it("stops the loop, rather than throwing out of it, when the recovery itself fails", () => {
+    const g = freshGame();
+    g.input.start = true;
+    advance(g, 5);
+    g.input.start = false;
+    advance(g, 5);
+    g.setup.options.flow = { ...flow, ballsPerGame: 0 }; // the rules cannot be rebuilt from this
+    hitTheTarget(g);
+    expect(() => advance(g, 50)).not.toThrow();
+    expect(g.broken).toMatch(/recovery failed: [\s\S]*ballsPerGame/);
+  });
+
+  it("passes on the credit and score-board commands the failed tick had made but not yet delivered, and only those", () => {
+    const g = createGame(demoTable, { flow });
+    const cmds: Command[] = [
+      { c: "credits", n: 2 }, // already applied and queued
+      { c: "hiscore", board: "main", score: 900, rank: 1 }, // made, not delivered
+      { c: "sound", play: "ding" }, // not the machine's business
+      { c: "credits", n: 3 },
+    ];
+    g.cmds.push(...cmds);
+    g.applied = 1;
+    takeCommands(g);
+    recover(g, new Error("boom"));
+    const out = takeCommands(g);
+    expect(out.filter((c) => c.c !== "dmd")).toEqual([{ c: "hiscore", board: "main", score: 900, rank: 1 }, { c: "credits", n: 3 }]);
+  });
+});
+

@@ -87,7 +87,8 @@ async function boot(): Promise<void> {
   function releaseAll(): void {
     for (const b of ["left", "right", "plunge", "coin", "start", "buyin"] as const) keys[b] = false;
     touch.clear();
-    mergeInput();
+    latch.clear(); // a press made just before the tab was hidden must not fire when it comes back
+    give(latch.update({ left: false, right: false, plunge: false, coin: false, start: false, buyin: false }));
   }
   addEventListener("blur", releaseAll);
   document.addEventListener("visibilitychange", () => {
@@ -111,7 +112,7 @@ async function boot(): Promise<void> {
     const dpr = devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawScene(ctx, innerWidth, innerHeight, game.table, snapshot(game));
-    drawHud(ctx, hudLines(game.rules.state, demoFlow.startCost), innerWidth, innerHeight);
+    drawHud(ctx, game.broken !== null ? ["SOMETHING WENT WRONG", "RELOAD THE PAGE"] : hudLines(game.rules.state, demoFlow.startCost), innerWidth, innerHeight);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -120,4 +121,11 @@ async function boot(): Promise<void> {
   (globalThis as Record<string, unknown>).__pinball = game;
 }
 
-void boot();
+boot().catch((e: unknown) => {
+  // storage that never answers, a table that does not load: say so instead of showing a blank page
+  console.error("could not start", e);
+  if (banner) {
+    banner.textContent = `Could not start: ${e instanceof Error ? e.message : String(e)}`;
+    banner.hidden = false;
+  }
+});

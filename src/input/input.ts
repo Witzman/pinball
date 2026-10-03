@@ -98,6 +98,14 @@ export class ButtonLatch {
     return out;
   }
 
+  /** Forgets everything: nothing held, nothing latched (a lost window or a hidden tab). */
+  clear(): void {
+    for (const b of BUTTONS) {
+      this.held[b] = false;
+      this.latched[b] = false;
+    }
+  }
+
   /** The frame has run: what was only latched is forgotten. Returns what the game should see now. */
   frameDone(): GameInput {
     for (const b of BUTTONS) this.latched[b] = false;

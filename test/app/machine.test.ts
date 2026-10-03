@@ -32,6 +32,15 @@ describe("reading the saved machine", () => {
     for (const text of bad) expect(parseStored(text, 7), text).toEqual(fresh(7));
   });
 
+  it("turns a negative zero into 0, and cuts boards longer than the machine keeps, when it reads them", () => {
+    const text = JSON.stringify({ credits: 0, boards: { main: [3, 2, 1].map((score) => ({ score, name: "AAA" })), bought: [5, 4, 3, 2].map((score) => ({ score, name: "AAA" })) } }).replace('"credits":0', '"credits":-0');
+    const s = parseStored(text, 7, 2);
+    expect(Object.is(s.credits, 0)).toBe(true);
+    expect(s.boards.main.map((e) => e.score)).toEqual([3, 2]);
+    expect(s.boards.bought.map((e) => e.score)).toEqual([5, 4]);
+    expect(parseStored(text, 7).boards.main).toHaveLength(3); // no size given: nothing cut
+  });
+
   it("hands the rules the scores only", () => {
     expect(toMachine(saved())).toEqual({ credits: 4, boards: { main: [900, 500], bought: [70] } });
   });
@@ -86,6 +95,18 @@ describe("the keeper", () => {
     await keeper.flush();
     const again = await createKeeper(store, opts).load();
     expect(again).toEqual({ credits: 1, boards: { main: [{ score: 1234, name: "AAA" }], bought: [] } });
+  });
+
+  it("cuts a stored board to the board size at load, so storage and the rules start in step", async () => {
+    const store = memoryStore();
+    await store.set(MACHINE_KEY, JSON.stringify({ credits: 1, boards: { main: [9, 8, 7, 6, 5, 4].map((score) => ({ score, name: "AAA" })), bought: [] } }));
+    const loaded = await createKeeper(store, { startCredits: 3, boardSize: 5 }).load();
+    expect(loaded.boards.main).toHaveLength(5);
+  });
+
+  it("refuses commands before the machine is loaded: load would overwrite them", () => {
+    const keeper = createKeeper(memoryStore(), opts);
+    expect(() => keeper.apply([{ c: "credits", n: 1 }])).toThrow(/load the machine before applying/);
   });
 
   it("writes nothing when nothing changed", async () => {

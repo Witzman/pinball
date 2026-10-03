@@ -30,14 +30,18 @@ const isEntry = (v: unknown): v is Entry =>
   typeof v === "object" && v !== null && typeof (v as Entry).score === "number" && typeof (v as Entry).name === "string" && (v as Entry).name.length <= 12;
 
 /** Reads saved text. Anything that is not a valid saved machine gives a fresh one, never an error: storage is untrusted. */
-export function parseStored(text: string | null, startCredits: number): StoredMachine {
+export function parseStored(text: string | null, startCredits: number, boardSize = Infinity): StoredMachine {
   if (text === null) return fresh(startCredits);
   try {
     const raw = JSON.parse(text) as { credits?: unknown; boards?: { main?: unknown; bought?: unknown } };
     const main = raw?.boards?.main;
     const bought = raw?.boards?.bought;
     if (!Array.isArray(main) || !Array.isArray(bought) || !main.every(isEntry) || !bought.every(isEntry)) return fresh(startCredits);
-    const stored: StoredMachine = { credits: raw.credits as number, boards: { main: main as Entry[], bought: bought as Entry[] } };
+    // credits + 0 turns a negative zero into 0; boards longer than the machine keeps are cut here, not on the first score
+    const stored: StoredMachine = {
+      credits: (raw.credits as number) + 0,
+      boards: { main: (main as Entry[]).slice(0, boardSize), bought: (bought as Entry[]).slice(0, boardSize) },
+    };
     return validateMachine(toMachine(stored)).length === 0 ? stored : fresh(startCredits);
   } catch {
     return fresh(startCredits);
@@ -72,13 +76,16 @@ export interface Keeper {
 /** Keeps the stored machine in step with the game. Saves run one after another; a failed save is reported, never thrown. */
 export function createKeeper(store: Store, opts: { startCredits: number; boardSize: number; onError?: (e: unknown) => void }): Keeper {
   let machine = fresh(opts.startCredits);
+  let loaded = false;
   let chain: Promise<void> = Promise.resolve();
   return {
     async load() {
-      machine = parseStored(await store.get(MACHINE_KEY).catch(() => null), opts.startCredits);
+      machine = parseStored(await store.get(MACHINE_KEY).catch(() => null), opts.startCredits, opts.boardSize);
+      loaded = true;
       return structuredClone(machine);
     },
     apply(cmds) {
+      if (!loaded) throw new Error("keeper: load the machine before applying commands");
       if (!applyCommands(machine, cmds, opts.boardSize)) return;
       const text = JSON.stringify(machine);
       chain = chain.then(() => store.set(MACHINE_KEY, text)).catch((e) => opts.onError?.(e));

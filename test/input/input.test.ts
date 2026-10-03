@@ -147,6 +147,16 @@ describe("button latch", () => {
     expect(l.seen().plunge).toBe(false);
   });
 
+  it("forgets everything on clear: a press just before the window was lost does not fire later", () => {
+    const l = new ButtonLatch();
+    l.update({ ...fresh(), start: true, left: true });
+    l.clear();
+    expect(l.seen()).toEqual(fresh());
+    expect(l.frameDone()).toEqual(fresh());
+    // and a button that is still down when the window comes back is a new press
+    expect(l.update({ ...fresh(), left: true }).left).toBe(true);
+  });
+
   it("works for every button", () => {
     for (const b of ["left", "right", "plunge", "coin", "start", "buyin"] as const) {
       const l = new ButtonLatch();

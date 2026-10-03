@@ -35,6 +35,14 @@ export interface Game {
   errors: string[];
   /** How many errors the loop has recovered from in all. */
   errorCount: number;
+  /** Errors in a row without a calm stretch between; too many and the game gives up (`broken`). */
+  errorStreak: number;
+  /** Ticks since the last error. */
+  calmTicks: number;
+  /** Set when the game could not be kept going: the loop stops and the leaves say so. */
+  broken: string | null;
+  /** How many of this tick's commands have been applied and queued. */
+  applied: number;
   /** Commands the rules gave since the leaves last took them (`takeCommands`). */
   outbox: Command[];
   /** Buttons as the rules last heard of them, to find the edges. */
@@ -72,7 +80,7 @@ export function createGame(def: TableDef, opts: GameOptions = {}): Game {
   const idle = (): GameInput => ({ left: false, right: false, plunge: false, coin: false, start: false, buyin: false });
   const g: Game = {
     table, input: idle(), paused: false, accMs: 0, drains: 0,
-    rules, setup: { def, options: opts }, errors: [], errorCount: 0, outbox: [], pressed: idle(), arrivals: 0, events: [], cmds: [], drained: [],
+    rules, setup: { def, options: opts }, errors: [], errorCount: 0, errorStreak: 0, calmTicks: 0, broken: null, applied: 0, outbox: [], pressed: idle(), arrivals: 0, events: [], cmds: [], drained: [],
   };
   if (!opts.flow) {
     // free play: a ball waits on the plunger. With a flow the first ball comes when a game starts.
@@ -157,6 +165,7 @@ function applyCommands(g: Game, cmds: readonly Command[]): void {
       if (!kickTrigger(g, cmd.lock)) throw new Error(`releaseBall "${cmd.lock}": no ball is held in that sinkhole`);
     }
     g.outbox.push(cmd);
+    g.applied += 1;
   }
 }
 
@@ -190,6 +199,7 @@ export function tick(g: Game): void {
   // The drained balls stay in the array while the rules run, so the ball indices in the
   // events and in the commands (lockBall) mean what they meant when the events were made.
   g.cmds.length = 0;
+  g.applied = 0;
   g.rules.step(t, events, g.cmds);
   applyCommands(g, g.cmds);
   for (let k = drained.length - 1; k >= 0; k--) w.balls.splice(drained[k]!, 1);
@@ -204,6 +214,9 @@ export function takeCommands(g: Game): Command[] {
 
 /** The most error messages a game keeps. */
 const MAX_ERRORS = 10;
+/** Errors in a row, with fewer than CALM_TICKS good ticks between, after which the game gives up instead of restarting forever. */
+const MAX_STREAK = 5;
+const CALM_TICKS = 1000;
 
 /**
  * A tick threw, so the game is in a state nobody can reason about (a tick that stops
@@ -213,6 +226,9 @@ const MAX_ERRORS = 10;
  */
 export function recover(g: Game, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
+  // what the failed tick had already told the machine (credits, a score board place) must reach the
+  // keeper, or storage would drift from the rules' own boards, which carry over
+  for (const c of g.cmds.slice(g.applied)) if (c.c === "credits" || c.c === "hiscore") g.outbox.push(c);
   g.errorCount += 1;
   g.errors.push(message);
   if (g.errors.length > MAX_ERRORS) g.errors.shift();
@@ -242,18 +258,31 @@ export function recover(g: Game, error: unknown): void {
 
 /**
  * Runs the physics for `dtMs` of real time, in whole ticks; the remainder carries
- * over. A tick that throws is recovered from (see `recover`) instead of ending the loop.
+ * over. A tick that throws is recovered from (see `recover`) instead of ending the loop;
+ * an error that keeps coming back (or a recovery that fails) stops the game and sets `broken`.
  */
 export function advance(g: Game, dtMs: number): void {
-  if (g.paused) return;
+  if (g.paused || g.broken !== null) return;
   g.accMs += Math.min(dtMs, MAX_FRAME_MS);
   while (g.accMs >= TICK_MS) {
     try {
       tick(g);
+      if (++g.calmTicks >= CALM_TICKS) g.errorStreak = 0;
     } catch (e) {
-      recover(g, e);
+      g.calmTicks = 0;
+      g.errorStreak += 1;
+      try {
+        recover(g, e);
+      } catch (again) {
+        g.broken = `recovery failed: ${again instanceof Error ? again.message : String(again)}`;
+      }
+      if (g.broken === null && g.errorStreak >= MAX_STREAK) g.broken = `too many errors in a row, the last: ${g.errors[g.errors.length - 1] ?? "unknown"}`;
     }
     g.accMs -= TICK_MS;
+    if (g.broken !== null) {
+      g.accMs = 0;
+      return;
+    }
   }
 }
 
