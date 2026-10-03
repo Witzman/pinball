@@ -211,3 +211,24 @@ describe("ballHeight", () => {
     expect(ballHeight(t, { x: 0.07, y: 0.45, zone: 5 })).toBe(0);
   });
 });
+
+describe("effects data for a renderer", () => {
+  it("names the switch of every wall and post that has one, and null for the rest", () => {
+    const sc = buildScene(createGame(demoTable).table);
+    expect(sc.walls.filter((w) => w.sw !== null).map((w) => w.sw)).toEqual(["target1"]);
+    expect(sc.posts.map((p) => p.sw)).toEqual(["bumper1", "bumper2"]);
+    expect(sc.walls.filter((w) => w.sw === null).length).toBe(sc.walls.length - 1);
+  });
+
+  it("lists the switches hit since the last snapshot, with their strength and whether they kicked, and only those", () => {
+    const g = createGame(demoTable);
+    const events = [
+      { a: "switch", sw: "bumper1", kind: "kick", s: 0.7 },
+      { a: "flip", side: "L", up: true },
+      { a: "switch", sw: "target1", kind: "hit", s: 0.2 },
+      { a: "drain" },
+    ] as const;
+    expect(snapshot(g, [], "top", events).hits).toEqual([{ sw: "bumper1", s: 0.7, kick: true }, { sw: "target1", s: 0.2, kick: false }]);
+    expect(snapshot(g).hits).toEqual([]);
+  });
+});

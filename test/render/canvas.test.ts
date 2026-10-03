@@ -131,7 +131,7 @@ describe("the canvas renderer", () => {
     const { ctx, log } = recordingCtx();
     const kinds = new Set(scene.walls.map((w) => w.kind));
     expect(kinds.size).toBeGreaterThan(1);
-    scene.posts.push({ x: 0.2, y: 0.2, r: 0.01, kind: "post", zoneMask: 1 }); // the demo's own posts are bumpers with switches
+    scene.posts.push({ x: 0.2, y: 0.2, r: 0.01, kind: "post", zoneMask: 1, sw: null }); // the demo's own posts are bumpers with switches
     drawScene(ctx, 600, 900, scene, snapshot(g));
     const colour = { wall: "#9aa6c4", rubber: "#4da3ff", switch: "#ffb84d" } as const;
     for (const k of kinds) expect(log).toContain(`strokeStyle=${colour[k]}`);

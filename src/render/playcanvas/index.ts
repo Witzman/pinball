@@ -124,7 +124,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     m.emissiveIntensity = intensity;
     m.emissiveMap = glowTex;
     m.opacityMap = glowTex;
-    m.opacityMapChannel = "r";
+    m.opacityMapChannel = "a"; // the glow texture carries its softness in the alpha channel
     m.blendType = pc.BLEND_ADDITIVE;
     m.depthWrite = false;
     m.useLighting = false;
@@ -149,6 +149,21 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
   const X = (x: number) => (x - sceneW / 2) * S;
   const Z = (y: number) => (y - sceneL / 2) * S;
 
+  /** Things that light up for a moment when a switch is hit: the materials to brighten and by how much. */
+  interface Flash {
+    level: number;
+    parts: { mat: pc.StandardMaterial; base: number; boost: number }[];
+  }
+  const flashes = new Map<string, Flash>();
+  const flashFor = (sw: string): Flash => {
+    let f = flashes.get(sw);
+    if (!f) {
+      f = { level: 0, parts: [] };
+      flashes.set(sw, f);
+    }
+    return f;
+  };
+
   interface Insert { disc: pc.Entity; glow: pc.Entity; rgb: [number, number, number]; level: number; discMat: pc.StandardMaterial; glowMat: pc.StandardMaterial }
   const inserts = new Map<string, Insert>();
   const insertMaterial = (rgb: [number, number, number], level: number): pc.StandardMaterial => material({ diffuse: [rgb[0] * 0.15, rgb[1] * 0.15, rgb[2] * 0.15], emissive: rgb, emissiveIntensity: level * 1.6, metal: 0, gloss: 0.9 });
@@ -158,6 +173,11 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
 
   let flipperEntities: pc.Entity[][] = [];
   const balls: pc.Entity[] = [];
+  const TRAIL = 9;
+  const trails: { pos: { x: number; y: number; z: number }[]; ents: pc.Entity[] }[] = [];
+  const trailMat = glowMaterial([0.6, 0.8, 1], 0.45);
+  let focusX = 0;
+  let focusZ = 0;
   const ballLift: number[] = []; // the drawn height of each ball: it eases toward the real one, so a drop off the end of a ramp is not a jump
   let built: pc.Entity | null = null;
 
@@ -169,6 +189,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
       built = null;
     }
     inserts.clear();
+    flashes.clear();
     const g = new pc.Entity("static");
     root.addChild(g);
     built = g;
@@ -204,8 +225,10 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
           place(cap, x, RAIL_H + 0.1, z, RAIL_T * 1.2, RAIL_T * 1.2, RAIL_T * 1.2);
         }
       } else {
-        const e = add(g, "box", wl.kind === "rubber" ? mats.rubber : mats.amber);
+        const own = (wl.kind === "rubber" ? mats.rubber : mats.amber).clone() as pc.StandardMaterial;
+        const e = add(g, "box", own);
         place(e, (ax + bx) / 2, RAIL_H * 0.45, (az + bz) / 2, len, RAIL_H * 0.9, RAIL_T * 1.1, yaw);
+        if (wl.sw !== null) flashFor(wl.sw).parts.push({ mat: own, base: own.emissiveIntensity, boost: 3.5 });
       }
     }
     // posts and bumpers
@@ -218,10 +241,16 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
         place(body, x, 1.2, z, r * 2, 2.4, r * 2);
         const ring = add(g, "cylinder", mats.chrome);
         place(ring, x, 2.45, z, r * 2.2, 0.35, r * 2.2);
-        const dome = add(g, "sphere", mats.bumperCap, false);
+        const domeMat = mats.bumperCap.clone() as pc.StandardMaterial;
+        const dome = add(g, "sphere", domeMat, false);
         place(dome, x, 2.6, z, r * 1.6, r * 0.9, r * 1.6);
-        const glow = add(g, "plane", glowMaterial([1, 0.6, 0.15], 0.45), false);
+        const glowMat = glowMaterial([1, 0.6, 0.15], 0.45);
+        const glow = add(g, "plane", glowMat, false);
         place(glow, x, 0.06, z, r * 4.2, 1, r * 4.2);
+        if (p.sw !== null) {
+          const f = flashFor(p.sw);
+          f.parts.push({ mat: domeMat, base: domeMat.emissiveIntensity, boost: 5 }, { mat: glowMat, base: glowMat.emissiveIntensity, boost: 2.2 });
+        }
       } else {
         const e = add(g, "cylinder", mats.chrome);
         place(e, x, 1.6, z, r * 2, 3.2, r * 2);
@@ -285,7 +314,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     glass.setLocalEulerAngles(90, 0, 0);
     glass.setLocalScale(wS, 1, 40);
     const dmdBack = add(g, "box", black, false);
-    place(dmdBack, 0, 13, bz + 8.02, wS * 0.7, 12, 0.6);
+    place(dmdBack, 0, 13, bz + 8.02, wS * 0.9, 16, 0.6);
     displayCanvas = document.createElement("canvas");
     displayCanvas.width = 640;
     displayCanvas.height = 160;
@@ -297,7 +326,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     const dmd = add(g, "plane", dmdMat, false);
     dmd.setLocalPosition(0, 13, bz + 8.4);
     dmd.setLocalEulerAngles(90, 0, 0);
-    dmd.setLocalScale(wS * 0.66, 1, wS * 0.66 * 0.25);
+    dmd.setLocalScale(wS * 0.84, 1, wS * 0.84 * 0.25);
   }
 
   let displayCanvas: HTMLCanvasElement | null = null;
@@ -382,8 +411,14 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
       distance = fitDistance(pitch, fov, w / h, sceneW * S, sceneL * S, RAIL_H * 3, [[(-sceneW * S) / 2, 20, (-sceneL * S) / 2], [(sceneW * S) / 2, 20, (-sceneL * S) / 2]]);
     }
     camera.camera!.fov = fov;
-    camera.setPosition(0, Math.cos(pitch) * distance, Math.sin(pitch) * distance);
-    camera.lookAt(0, 0, 0);
+    // the view leans a little toward the ball, eased so it never jerks
+    const b = snap.balls[0];
+    const wantX = b ? Math.max(-1, Math.min(1, X(b.x) / ((sceneW * S) / 2))) * 3 : 0;
+    const wantZ = b ? Math.max(-1, Math.min(1, Z(b.y) / ((sceneL * S) / 2))) * 7 : 0;
+    focusX += (wantX - focusX) * 0.06;
+    focusZ += (wantZ - focusZ) * 0.06;
+    camera.setPosition(focusX, Math.cos(pitch) * distance, Math.sin(pitch) * distance + focusZ);
+    camera.lookAt(focusX, 0, focusZ);
   }
 
   app.start();
@@ -414,6 +449,39 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
           place(e, X(b.x), b.r * S + lift, Z(b.y), b.r * S * 2, b.r * S * 2, b.r * S * 2);
         }
       });
+      // flashes: a hit lights its parts, which then fade
+      for (const h of snap.hits) {
+        const f = flashes.get(h.sw);
+        if (f) f.level = Math.max(f.level, 0.45 + 0.55 * Math.min(1, h.s + (h.kick ? 0.4 : 0)));
+      }
+      for (const f of flashes.values()) {
+        if (f.level <= 0.01 && f.level !== 0) f.level = 0;
+        else f.level *= 0.84;
+        for (const part of f.parts) {
+          part.mat.emissiveIntensity = part.base + part.boost * f.level;
+          part.mat.update();
+        }
+      }
+      // a short glowing trail behind a fast ball
+      snap.balls.forEach((b, i) => {
+        let t = trails[i];
+        if (!t) {
+          t = { pos: [], ents: Array.from({ length: TRAIL }, () => add(dyn, "plane", trailMat, false)) };
+          trails[i] = t;
+        }
+        const fast = Math.hypot(b.vx, b.vy) > 0.9;
+        t.pos.unshift({ x: X(b.x), y: b.r * S + (ballLift[i] ?? 0), z: Z(b.y) });
+        if (t.pos.length > TRAIL) t.pos.length = TRAIL;
+        t.ents.forEach((e, k) => {
+          const p = t!.pos[k + 1];
+          e.enabled = fast && p !== undefined;
+          if (p) {
+            const size = b.r * S * 2.6 * (1 - (k + 1) / (TRAIL + 2));
+            place(e, p.x, Math.max(0.15, p.y * 0.5), p.z, size, 1, size);
+          }
+        });
+      });
+      for (let i = snap.balls.length; i < trails.length; i++) trails[i]?.ents.forEach((e) => (e.enabled = false));
       for (const [id, ins] of inserts) {
         const lamp = snap.lamps[id] ?? "off";
         const level = LAMP_LEVEL[lamp];
