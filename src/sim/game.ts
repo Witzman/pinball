@@ -145,8 +145,10 @@ function applyInput(g: Game): void {
   const w = g.table.world;
   const l = g.table.flipperIds.indexOf("left");
   const r = g.table.flipperIds.indexOf("right");
-  // a tilted ball is dead: the flippers do not answer (derived from the rules' state, so it survives a recovery)
-  const dead = g.rules.state.game?.tilted === true;
+  // a tilted ball is dead: the flippers do not answer (derived from the rules' state, so it survives a recovery);
+  // `tilted` stays set until the next serve, so only the play phase is dead, not the attract screen after it
+  const game = g.rules.state.game;
+  const dead = game?.tilted === true && game.phase === "play";
   if (l >= 0) w.flippers[l]!.on = !dead && g.input.left;
   if (r >= 0) w.flippers[r]!.on = !dead && g.input.right;
   if (w.plunger) w.plunger.pull = g.input.plunge ? 1 : 0;

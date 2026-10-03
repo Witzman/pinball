@@ -45,6 +45,16 @@ describe("a tilt in the game", () => {
     expect(g.table.world.flippers[g.table.flipperIds.indexOf("right")]!.u).toBe(0);
   });
 
+  it("lets the flippers work again once the play is over, although tilted stays set until the next serve", () => {
+    const g = started({ free: 0, warnings: 0, decayTicks: 2000 });
+    nudgeAndRun(g, 5);
+    expect(g.rules.state.game).toMatchObject({ tilted: true, phase: "play" });
+    g.rules.state.game!.phase = "attract"; // as after the last ball: the flag is still set
+    g.input.left = true;
+    for (let i = 0; i < 60; i++) tick(g);
+    expect(leftFlipper(g).u).toBe(1);
+  });
+
   it("drops a flipper that was up when the tilt came, and the next ball has working flippers again", () => {
     const g = started({ free: 0, warnings: 0, decayTicks: 2000 });
     g.input.left = true;

@@ -21,6 +21,7 @@ export function hudLines(s: RulesState, startCost: number): string[] {
       return [g.credits >= startCost ? "PRESS START" : "INSERT COIN", credits, ...(top !== undefined ? [`HIGH SCORE ${groups(top)}`] : [])];
     }
     case "play":
+      if (g.tilted) return ["TILT", score, credits];
       return [`BALL ${s.player.ballNo}   ${score}`, credits];
     case "bonus":
       return ["BONUS", score, credits];

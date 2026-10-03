@@ -34,6 +34,10 @@ describe("hud lines", () => {
     expect(hudLines(state({ credits: 5, board: { main: [123456, 100], bought: [] } }), 1)).toEqual(["PRESS START", "CREDITS 5", "HIGH SCORE 123,456"]);
   });
 
+  it("shows TILT instead of the ball number once the ball is tilted", () => {
+    expect(hudLines(state({ phase: "play", credits: 1, tilted: true }, 12500, 2), 1)).toEqual(["TILT", "SCORE 12,500", "CREDITS 1"]);
+  });
+
   it("shows ball number and score while playing", () => {
     expect(hudLines(state({ phase: "play", credits: 1 }, 12500, 2), 1)).toEqual(["BALL 2   SCORE 12,500", "CREDITS 1"]);
   });
