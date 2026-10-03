@@ -1,7 +1,9 @@
-import { MACHINE_BAND as BAND } from "../sim/layout";
+import { MACHINE_BAND as BAND, MACHINE_BUTTONS } from "../sim/layout";
+import type { MachineButton } from "../sim/layout";
 
-/** The names of the machine buttons of the touch screen, left to right, as the top band is divided (MACHINE_BUTTONS). */
-const BAND_LABELS = ["COIN", "BUY MORE", "START"] as const;
+/** What the machine buttons of the touch screen are called on screen; drawn in the order of MACHINE_BUTTONS. */
+const NAMES: Record<MachineButton, string> = { coin: "COIN", buyin: "BUY MORE", start: "START" };
+const BAND_LABELS = MACHINE_BUTTONS.map((b) => NAMES[b]);
 
 /**
  * Draws text lines below the touch band, the first one big, and the names of the touch

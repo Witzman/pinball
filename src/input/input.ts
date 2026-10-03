@@ -33,8 +33,6 @@ export function applyKey(state: GameInput, code: string, down: boolean): "pause"
 
 export type Zone = "left" | "right" | "plunge" | "coin" | "buyin" | "start";
 
-export { MACHINE_BAND };
-
 /**
  * Lower half of the screen: left and right halves are the flippers, the right edge is
  * the plunger. The top band, in thirds from the left: coin, buy-in, start. The rest of
