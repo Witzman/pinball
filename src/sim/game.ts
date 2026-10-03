@@ -1,5 +1,5 @@
 import type { Ball } from "../core/types";
-import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_TRIGGER } from "../core/types";
+import { CONTACT_CAPTURE, CONTACT_GATE_AB, CONTACT_GATE_BA, CONTACT_HIT, CONTACT_KICK, CONTACT_TRIGGER } from "../core/types";
 import { kickHeld, nudge as shove, step } from "../core/step";
 import { createRules, freePlay } from "../rules";
 import type { Command, Machine, Rules, RulesEvent, TableSetup } from "../rules";
@@ -160,6 +160,7 @@ const KINDS = {
   [CONTACT_GATE_BA]: "gateBA",
   [CONTACT_TRIGGER]: "trigger",
   [CONTACT_CAPTURE]: "capture",
+  [CONTACT_KICK]: "kick",
 } as const;
 
 const BUTTONS = ["left", "right", "plunge", "coin", "start", "buyin"] as const;

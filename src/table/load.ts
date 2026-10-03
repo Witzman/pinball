@@ -1,7 +1,8 @@
+import { DT } from "../core/step";
 import { createWorld, makeFlipper, makePlunger, slopeGravity } from "../core/world";
 import type { Ball, Circle, Gate, Magnet, Segment, Trigger, World } from "../core/types";
-import type { Point, TableDef } from "./schema";
-import { validateTable } from "./validate";
+import type { KickDef, Point, TableDef } from "./schema";
+import { DEFAULT_KICK_COOLDOWN_MS, DEFAULT_KICK_MIN, validateTable } from "./validate";
 
 export interface LoadedTable {
   world: World;
@@ -57,10 +58,16 @@ export function loadTable(def: TableDef): LoadedTable {
 
   const segments: Segment[] = [];
   const circles: Circle[] = [];
+  let kickers = 0; // one cooldown per kicker as the table defines it: the chords of a polyline or arc share it
+  /** The collider fields of a kicker (#49); nothing for a passive collider, so old tables build the same objects. */
+  const kickFields = (k: KickDef | undefined) =>
+    k === undefined
+      ? {}
+      : { kick: k.speed, kickMin: k.minHit ?? DEFAULT_KICK_MIN, kickCd: Math.round((k.cooldownMs ?? DEFAULT_KICK_COOLDOWN_MS) / (DT * 1000)), kid: kickers++ };
 
   for (const w of def.walls) {
     const mat = def.materials[w.material]!;
-    const base = { e: mat.e, mu: mat.mu, zoneMask: zoneMask(w.zones), sw: swId(w.switch), ...(w.oneWay === true ? { oneWay: true } : {}) };
+    const base = { e: mat.e, mu: mat.mu, zoneMask: zoneMask(w.zones), sw: swId(w.switch), ...(w.oneWay === true ? { oneWay: true } : {}), ...kickFields(w.kick) };
     let pts: Point[];
     if (w.type === "segment") pts = [w.a, w.b];
     else if (w.type === "polyline") pts = w.closed ? [...w.points, w.points[0]!] : w.points;
@@ -74,7 +81,7 @@ export function loadTable(def: TableDef): LoadedTable {
 
   for (const p of def.posts) {
     const mat = def.materials[p.material]!;
-    circles.push({ x: p.at[0] * MM, y: p.at[1] * MM, r: p.r * MM, e: mat.e, mu: mat.mu, zoneMask: zoneMask(p.zones), sw: swId(p.switch) });
+    circles.push({ x: p.at[0] * MM, y: p.at[1] * MM, r: p.r * MM, e: mat.e, mu: mat.mu, zoneMask: zoneMask(p.zones), sw: swId(p.switch), ...kickFields(p.kick) });
   }
 
   const gates: Gate[] = (def.gates ?? []).map((g) => ({
@@ -112,7 +119,7 @@ export function loadTable(def: TableDef): LoadedTable {
       })
     : null;
 
-  const world = createWorld({ balls: [], segments, circles, gates, triggers, magnets, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg) });
+  const world = createWorld({ balls: [], segments, circles, gates, triggers, magnets, flippers, plunger, gravity: slopeGravity(def.playfield.slopeDeg), kickWait: new Int32Array(kickers) });
   return { world, flipperIds: def.flippers.map((f) => f.id), triggerIds: (def.triggers ?? []).map((t) => t.id), magnetIds: (def.magnets ?? []).map((m) => m.id), switchNames, playfieldWidth: def.playfield.width * MM, playfieldLength: def.playfield.length * MM, ballRadius: def.ball.radius * MM, ballMass: def.ball.mass * MM, heights: (def.visual?.heights ?? []).map((h) => h * MM), ramps: (def.visual?.ramps ?? []).map((r) => ({ zone: r.zone, path: r.path.map((q) => ({ x: q[0] * MM, y: q[1] * MM })), width: r.width * MM })) };
 }
 

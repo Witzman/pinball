@@ -7,7 +7,7 @@ import type { TableDef } from "../table/schema";
 
 /** What the physics and the input layer tell the rules. Names, never numeric ids. */
 export type RulesEvent =
-  | { t: "switch"; tick: number; ball: number; sw: string; kind: "hit" | "gateAB" | "gateBA" | "trigger" | "capture"; impulse: number }
+  | { t: "switch"; tick: number; ball: number; sw: string; kind: "hit" | "gateAB" | "gateBA" | "trigger" | "capture" | "kick"; impulse: number }
   | { t: "button"; tick: number; button: "left" | "right" | "plunge" | "coin" | "start" | "buyin"; down: boolean }
   | { t: "drain"; tick: number; ball: number }
   | { t: "ballAtPlunger"; tick: number }

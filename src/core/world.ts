@@ -27,11 +27,13 @@ export interface WorldInit {
   gravity: number;
   drag?: number;
   spinDamping?: number;
+  /** One cooldown counter per kicker (#49); default none. */
+  kickWait?: Int32Array;
 }
 
 /** Colliders are static after this call: the grid is built here, once. */
 export function createWorld(init: WorldInit): World {
-  return { ...init, gates: init.gates ?? [], triggers: init.triggers ?? [], magnets: init.magnets ?? [], flippers: init.flippers ?? [], plunger: init.plunger ?? null, drag: init.drag ?? 0, spinDamping: init.spinDamping ?? 0, grid: buildGrid(init.segments, init.circles), contacts: contactBuffer(), tick: 0 };
+  return { ...init, gates: init.gates ?? [], triggers: init.triggers ?? [], magnets: init.magnets ?? [], flippers: init.flippers ?? [], plunger: init.plunger ?? null, drag: init.drag ?? 0, spinDamping: init.spinDamping ?? 0, kickWait: init.kickWait ?? new Int32Array(0), grid: buildGrid(init.segments, init.circles), contacts: contactBuffer(), tick: 0 };
 }
 
 /** Gravity along the playfield for a slope in degrees. Load time only: sin is not allowed in the step. */
