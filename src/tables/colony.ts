@@ -48,7 +48,7 @@ export const colonyTable: TableDef = {
     { id: "skill2", at: [499, 500], r: 10, switch: "skill2" },
     { id: "skill3", at: [499, 330], r: 10, switch: "skill3" },
   ],
-  plunger: { at: [499, 1030], dirDeg: -90, width: 32, stroke: 80, maxSpeed: 5, pullSpeed: 0.2, material: "plunger" },
+  plunger: { at: [499, 1030], dirDeg: -90, width: 32, stroke: 80, maxSpeed: 2, pullSpeed: 0.2, material: "plunger" },
   flippers: [
     { id: "left", pivot: [134, 900], length: 58, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber" },
     { id: "right", pivot: [354, 900], length: 58, rBase: 9.5, rTip: 5, restDeg: 150, activeDeg: 210, upMs: 40, downMs: 100, material: "rubber" },

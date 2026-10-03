@@ -5,7 +5,7 @@ import type { GameInput } from "../sim/game";
 import { buildScene, snapshot } from "../sim/snapshot";
 import { localStore } from "../storage";
 import { hudLines } from "./hud";
-import { createKeeper, toMachine } from "./machine";
+import { createKeeper, machineKey, toMachine } from "./machine";
 import { chooseTable } from "./table-choice";
 
 const found = document.getElementById("table");
@@ -22,6 +22,7 @@ async function boot(): Promise<void> {
   const keeper = createKeeper(localStore(), {
     startCredits: flow.startCredits,
     boardSize: flow.boardSize ?? 10,
+    key: machineKey(def.id),
     onError: (e) => console.error("could not save the machine", e),
   });
   const stored = await keeper.load();
