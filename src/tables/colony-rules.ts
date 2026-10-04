@@ -1,6 +1,6 @@
 import type { FlowConfig, TableRules } from "../rules";
 import { demoFlow } from "./demo-rules";
-import { BRIDGE_HOLD, LOOP_SHOT, TRAIL_SHOT, CHAMBER_HOLD, FUNGUS_BANK, FUNGUS_RESET, CHAMBER_POINTS, KICK_ONLY, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
+import { TRAIL_AWARD, TRAIL_NAMES, TRAIL_SHOTS, TRAIL_WINDOW, BRIDGE_HOLD, LOOP_SHOT, TRAIL_SHOT, CHAMBER_HOLD, FUNGUS_BANK, FUNGUS_RESET, CHAMBER_POINTS, KICK_ONLY, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
 
 /** The proving ground's flow with the Colony's replay score; the rest are still placeholders. */
 export const colonyFlow: FlowConfig = { ...demoFlow, replayScore: REPLAY_SCORE };
@@ -66,6 +66,28 @@ function bankUp(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], bank: 
   c.emit({ c: "dropBank", bank });
 }
 
+/**
+ * The Pheromone Trail (#26): a trail shot that is not the one just made, within TRAIL_WINDOW of it, lengthens the chain;
+ * the same shot again only keeps the window open, and a shot after the window starts a new chain. The second shot makes a
+ * trail (one more `scent`, which lasts the game); from there each shot pays the award of its length (the 5th and later: Super).
+ */
+function trailShot(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], shot: string): void {
+  const which = TRAIL_SHOTS.indexOf(shot as (typeof TRAIL_SHOTS)[number]) + 1;
+  if (which === 0) return;
+  const running = c.count("trailLen") > 0;
+  c.cancel("trail");
+  c.after("trail", TRAIL_WINDOW);
+  if (running && c.count("trailLast") === which) return;
+  c.reset("trailLast");
+  c.add("trailLast", which);
+  const length = c.add("trailLen");
+  if (length < 2) return;
+  if (length === 2) c.add("scent");
+  const level = Math.min(length, 5);
+  c.addScore(TRAIL_AWARD[level]!);
+  c.emit({ c: "dmd", show: { id: "trail", args: { name: TRAIL_NAMES[level]!, length, scent: c.count("scent"), points: TRAIL_AWARD[level]! } } });
+}
+
 /** The kickback: a ball at the foot of the left outlane is kicked up the lane once per ball (the lamp is lit at the start of the ball), else let go to drain. */
 function kickbackShot(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], e: { sw: string; kind: string }): void {
   if (e.sw !== "kickbackL" || e.kind !== "capture") return;
@@ -113,6 +135,7 @@ export const colonyRules: TableRules = {
     if (points > 0 && (e.kind === "kick" || !KICK_ONLY.has(e.sw))) c.addScore(points);
   },
   onShot(c, shot) {
+    trailShot(c, shot);
     if (shot === "trailWest" || shot === "trailEast" || shot === "pheromoneLoop") {
       const points = shot === "pheromoneLoop" ? LOOP_SHOT : TRAIL_SHOT;
       c.addScore(points);
@@ -129,6 +152,11 @@ export const colonyRules: TableRules = {
     }
   },
   onTimer(c, id) {
+    if (id === "trail") {
+      c.reset("trailLen");
+      c.reset("trailLast");
+      return;
+    }
     if (id === "fungusL" || id === "fungusR") {
       bankUp(c, id);
       return;
@@ -155,10 +183,14 @@ export const colonyRules: TableRules = {
       c.cancel(bank);
       bankUp(c, bank);
     }
+    c.cancel("trail");
+    c.reset("trailLen");
+    c.reset("trailLast");
     c.cancel("pullBridge");
     c.emit({ c: "magnet", id: "pullBridge", on: false });
     c.reset("leafIn");
     c.reset("rootIn");
   },
+  persist: ["scent"],
   bonus: () => 0,
 };

@@ -61,3 +61,13 @@ export const KICKBACK_SPEED = 2.4;
 /** A trail shot (up an orbit past its spinner) and the Pheromone Loop (left to right under the dome); placeholders. */
 export const TRAIL_SHOT = 100_000;
 export const LOOP_SHOT = 150_000;
+
+/**
+ * The Pheromone Trail (#26): two or more different trail shots in a row, each within TRAIL_WINDOW ticks of the one before,
+ * build a trail. From the second shot on, each pays the award of the length so far: Trail (2), Double (3), Triple (4), Super (5 and more).
+ * Placeholders; the lengths double.
+ */
+export const TRAIL_WINDOW = 6000;
+export const TRAIL_SHOTS = ["trailWest", "leafRamp", "pheromoneLoop", "rootRamp", "trailEast"] as const;
+export const TRAIL_NAMES = ["", "", "trail", "double", "triple", "super"] as const;
+export const TRAIL_AWARD = [0, 0, 200_000, 400_000, 800_000, 1_600_000] as const;
