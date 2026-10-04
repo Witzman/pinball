@@ -10,6 +10,7 @@ const LANES = ["skill1", "skill2", "skill3"] as const;
 /** The skill shot window is open from the start of a ball until it touches anything but the skill lanes, or drains. */
 function closeSkill(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0]): void {
   c.reset("skillOpen");
+  c.reset("skillLast");
   for (const l of LANES) if (c.lamp(l) === "flash") c.setLamp(l, "off");
 }
 
@@ -99,10 +100,35 @@ function kickbackShot(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], 
 }
 
 /**
+ * A skill lane was touched (lane 1 is the lowest). The harder the plunger is pulled, the further up the lane the ball
+ * rises; below the top it turns round and falls back, touching the lanes again on the way down. The skill shot is the
+ * lit lane being the highest one the ball reached before it turned: the ball has to be stopped on the lit lane by the
+ * pull alone. The top lane is the hardest (the ball must just not leave the lane) and pays the super skill shot.
+ * A ball that goes on over the top, or any other switch, ends the try; there is one try per ball.
+ */
+function skillLane(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], lane: number): void {
+  if (c.count("skillOpen") === 0) return;
+  const top = c.count("skillLast");
+  if (lane > top) { // still rising
+    c.reset("skillLast");
+    c.add("skillLast", lane);
+    return;
+  }
+  const lit = LANES.findIndex((l) => c.lamp(l) === "flash") + 1;
+  if (lit > 0 && top === lit) {
+    const points = lit === LANES.length ? SUPER_SKILL_SHOT : SKILL_SHOT;
+    c.setLamp(LANES[lit - 1]!, "collected");
+    c.addScore(points);
+    c.emit({ c: "dmd", show: { id: lit === LANES.length ? "superSkillShot" : "skillShot", args: { points } } });
+  }
+  closeSkill(c);
+}
+
+/**
  * The Colony so far: the skill shot. Each ball lights one of the three lanes up the plunger
- * lane at random (seeded, part of the state); reaching the lit lane before anything else on
- * the table is the skill shot (1,000,000); running the whole lane, skill1 to skill3 in order,
- * is the super skill shot (10,000,000). The small switches score a little. The rest of the
+ * lane at random (seeded, part of the state); stopping the ball on the lit lane with the pull
+ * of the plunger (see skillLane) is the skill shot (1,000,000), on the top lane the super
+ * skill shot (10,000,000). The small switches score a little. The rest of the
  * rules (trails, levels, missions) come with #26 to #41.
  */
 export const colonyRules: TableRules = {
@@ -119,11 +145,7 @@ export const colonyRules: TableRules = {
   },
   onSwitch(c, e) {
     if ((LANES as readonly string[]).includes(e.sw)) {
-      if (c.lamp(e.sw) === "flash") { // flashing only while the window is open and until it is collected
-        c.setLamp(e.sw, "collected");
-        c.addScore(SKILL_SHOT);
-        c.emit({ c: "dmd", show: { id: "skillShot", args: { points: SKILL_SHOT } } });
-      }
+      skillLane(c, LANES.indexOf(e.sw as (typeof LANES)[number]) + 1);
       return;
     }
     closeSkill(c);
@@ -144,11 +166,6 @@ export const colonyRules: TableRules = {
     if (shot === "leafRamp") { // the ball comes back down the left side: the Pull Bridge holds it at the upper flipper for the Dig Ramp shot
       c.emit({ c: "magnet", id: "pullBridge", on: true });
       c.after("pullBridge", BRIDGE_HOLD);
-    }
-    if (shot === "skillShot" && c.count("skillOpen") > 0 && c.count("superDone") === 0) {
-      c.add("superDone");
-      c.addScore(SUPER_SKILL_SHOT);
-      c.emit({ c: "dmd", show: { id: "superSkillShot", args: { points: SUPER_SKILL_SHOT } } });
     }
   },
   onTimer(c, id) {
