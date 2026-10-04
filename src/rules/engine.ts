@@ -39,6 +39,8 @@ const MAX_DEPTH = 16;
 const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /** A record's own entry; "constructor" or "toString" are not entries. */
+/** What a lamp shows the leaves: lit, flash or off (collected and unset are off). */
+const shown = (s: LitState | undefined): "off" | "lit" | "flash" => (s === "lit" || s === "flash" ? s : "off");
 const own = <T>(rec: Record<string, T>, id: string): T | undefined => (Object.hasOwn(rec, id) ? rec[id] : undefined);
 
 /** Ids become keys of plain records: "__proto__" would write to the prototype instead. */
@@ -168,10 +170,10 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
     lamp: (id) => own(state.lamps, id) ?? "off",
     setLamp(id, s: LitState) {
       needId("setLamp", id);
-      const wasLit = own(state.lamps, id) === "lit";
+      const was = shown(own(state.lamps, id));
       state.lamps[id] = s;
-      // the leaves only know lit and off: collected shows as off
-      if (wasLit !== (s === "lit")) out.push({ c: "setLamp", lamp: id, state: s === "lit" ? "lit" : "off" });
+      // the leaves know lit, flash and off: collected shows as off
+      if (was !== shown(s)) out.push({ c: "setLamp", lamp: id, state: shown(s) });
     },
     count: (id) => own(state.counters, id) ?? 0,
     add(id, n = 1) {
@@ -347,7 +349,7 @@ export function createRules(table: TableRules, opts: RulesOptions): Rules {
     stopActivity();
     for (const id of Object.keys(state.lamps).sort(byId)) {
       if (keepPersist && persisted.has(id)) continue;
-      if (state.lamps[id] === "lit") out.push({ c: "setLamp", lamp: id, state: "off" });
+      if (shown(state.lamps[id]) !== "off") out.push({ c: "setLamp", lamp: id, state: "off" });
       delete state.lamps[id];
     }
     for (const id of Object.keys(state.counters)) if (!(keepPersist && persisted.has(id))) delete state.counters[id];

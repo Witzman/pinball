@@ -49,7 +49,8 @@ export type Command =
   | { c: "sound"; play: string; vol?: number };
 
 /** A shot is off, lit, or collected: almost every reward is "light, then collect". */
-export type LitState = "off" | "lit" | "collected";
+/** `flash` is lit and asking to be hit now: a shot that is open for a short time. It counts as lit for collecting. */
+export type LitState = "off" | "lit" | "flash" | "collected";
 
 export interface TimerState {
   /** Absolute tick the timer fires at. */

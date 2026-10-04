@@ -9,7 +9,7 @@ import type { Ctx } from "./types";
  * the sinkhole's kick direction), so the outlane needs one that captures the ball.
  */
 export function kickback(c: Ctx, opts: { lamp: string; solenoid: string }): boolean {
-  if (c.lamp(opts.lamp) !== "lit") return false;
+  if (c.lamp(opts.lamp) !== "lit" && c.lamp(opts.lamp) !== "flash") return false;
   c.setLamp(opts.lamp, "off");
   c.emit({ c: "fireSolenoid", id: opts.solenoid });
   return true;

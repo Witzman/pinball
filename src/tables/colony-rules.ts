@@ -10,7 +10,7 @@ const LANES = ["skill1", "skill2", "skill3"] as const;
 /** The skill shot window is open from the start of a ball until it touches anything but the skill lanes, or drains. */
 function closeSkill(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0]): void {
   c.reset("skillOpen");
-  for (const l of LANES) if (c.lamp(l) === "lit") c.setLamp(l, "off");
+  for (const l of LANES) if (c.lamp(l) === "flash") c.setLamp(l, "off");
 }
 
 /**
@@ -114,12 +114,12 @@ export const colonyRules: TableRules = {
     c.setLamp("kickbackL", "lit");
     c.add("skillOpen");
     const lit = LANES[Math.floor(c.rnd() * LANES.length)]!;
-    for (const l of LANES) c.setLamp(l, l === lit ? "lit" : "off");
+    for (const l of LANES) c.setLamp(l, l === lit ? "flash" : "off"); // the open lane flashes: hit it now
     c.emit({ c: "dmd", show: { id: "skillLane", args: { lane: lit } } });
   },
   onSwitch(c, e) {
     if ((LANES as readonly string[]).includes(e.sw)) {
-      if (c.lamp(e.sw) === "lit") { // lit only while the window is open and until it is collected
+      if (c.lamp(e.sw) === "flash") { // flashing only while the window is open and until it is collected
         c.setLamp(e.sw, "collected");
         c.addScore(SKILL_SHOT);
         c.emit({ c: "dmd", show: { id: "skillShot", args: { points: SKILL_SHOT } } });

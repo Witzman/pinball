@@ -66,7 +66,7 @@ export function validateState(s: unknown): string[] {
   if (s.v !== 1) errs.push(`unknown state version ${String(s.v)}`);
   if (!isNat(s.tick)) errs.push("tick must be a non-negative integer");
   if (!isNat(s.rng) || s.rng > 0xffffffff) errs.push("rng must be a uint32");
-  if (!recordOf(s.lamps, (x) => x === "off" || x === "lit" || x === "collected")) errs.push("lamps must map ids to off, lit or collected");
+  if (!recordOf(s.lamps, (x) => x === "off" || x === "lit" || x === "flash" || x === "collected")) errs.push("lamps must map ids to off, lit, flash or collected");
   if (!recordOf(s.counters, isNum)) errs.push("counters must map ids to numbers");
   if (!recordOf(s.timers, (x) => isRecord(x) && isNat(x.due) && (x.every === undefined || (isNat(x.every) && x.every > 0)) && (x.tag === undefined || typeof x.tag === "string"))) {
     errs.push("timers must map ids to {due, every?, tag?} with whole-number ticks");

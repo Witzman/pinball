@@ -27,3 +27,11 @@ export function fitDistance(pitch: number, fovDeg: number, aspect: number, width
   }
   return hi;
 }
+
+/** How bright an insert is for a lamp state: dim when off, bright when lit, bright half of each period and dim the other half when flashing (on the simulation clock), half as bright when collected. */
+export const LAMP_LEVEL = { off: 0.25, lit: 1.2, flash: 1.2, collected: 0.5 } as const;
+export const FLASH_HALF_MS = 200;
+export function lampLevel(state: keyof typeof LAMP_LEVEL, tick: number): number {
+  if (state === "flash" && Math.floor(tick / FLASH_HALF_MS) % 2 === 1) return LAMP_LEVEL.off;
+  return LAMP_LEVEL[state];
+}

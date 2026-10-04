@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitDistance, onScreen } from "../../src/render/playcanvas/frame";
+import { FLASH_HALF_MS, LAMP_LEVEL, fitDistance, lampLevel, onScreen } from "../../src/render/playcanvas/frame";
 
 const W = 52;
 const L = 105;
@@ -27,5 +27,20 @@ describe("the camera frame of the PlayCanvas renderer", () => {
 
   it("does not count a point behind the camera as on the screen", () => {
     expect(onScreen(0, 0, 500, 100, deg(55), 45, 1)).toBe(false);
+  });
+});
+
+describe("lampLevel", () => {
+  it("is steady for off, lit and collected, whatever the time", () => {
+    for (const t of [0, 150, 200, 399, 400, 12345]) for (const s of ["off", "lit", "collected"] as const) expect(lampLevel(s, t)).toBe(LAMP_LEVEL[s]);
+  });
+
+  it("blinks a flashing lamp: bright for half a period, dim for the next, on the simulation tick", () => {
+    expect(lampLevel("flash", 0)).toBe(LAMP_LEVEL.flash);
+    expect(lampLevel("flash", FLASH_HALF_MS - 1)).toBe(LAMP_LEVEL.flash);
+    expect(lampLevel("flash", FLASH_HALF_MS)).toBe(LAMP_LEVEL.off);
+    expect(lampLevel("flash", 2 * FLASH_HALF_MS - 1)).toBe(LAMP_LEVEL.off);
+    expect(lampLevel("flash", 2 * FLASH_HALF_MS)).toBe(LAMP_LEVEL.flash);
+    expect(LAMP_LEVEL.flash).toBeGreaterThan(LAMP_LEVEL.off);
   });
 });
