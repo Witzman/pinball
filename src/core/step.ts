@@ -209,16 +209,16 @@ export function nudge(w: World, dvx: number, dvy: number): number {
   return n;
 }
 
-/** Sends the ball held in sinkhole `ti` out along its kick direction. Returns the ball's index, or -1 if none was held. */
-export function kickHeld(w: World, ti: number): number {
+/** Sends the ball held in sinkhole `ti` out along its kick direction, at the sinkhole's kick speed or at `speed` (m/s, 0 lets it go without a kick). Returns the ball's index, or -1 if none was held. */
+export function kickHeld(w: World, ti: number, speed?: number): number {
   const t = w.triggers[ti];
   if (!t) return -1;
   for (let bi = 0; bi < w.balls.length; bi++) {
     const b = w.balls[bi]!;
     if (b.hold === ti + 1) {
       b.hold = 0;
-      b.vx = t.kickx * t.kickSpeed;
-      b.vy = t.kicky * t.kickSpeed;
+      b.vx = t.kickx * (speed ?? t.kickSpeed);
+      b.vy = t.kicky * (speed ?? t.kickSpeed);
       return bi;
     }
   }

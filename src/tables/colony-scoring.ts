@@ -26,6 +26,12 @@ export const SWITCH_POINTS: Record<string, number> = {
   bumper2: 5_000,
   bumper3: 5_000,
   scout: 50_000,
+  fungusL1: 25_000,
+  fungusL2: 25_000,
+  fungusL3: 25_000,
+  fungusR1: 25_000,
+  fungusR2: 25_000,
+  fungusR3: 25_000,
   rollW: 10_000,
   rollO: 10_000,
   rollR: 10_000,
@@ -42,3 +48,10 @@ export const MAX_SCORE = Number.MAX_SAFE_INTEGER;
 
 /** The Pull Bridge holds the ball at the upper flipper this long after a Leaf Ramp shot (ticks, 1 ms each). Placeholder. */
 export const BRIDGE_HOLD = 1500;
+
+/** A whole bank of the Fungus Farm down (three targets): the bonus, and how long the bank stays down before it comes up again (ticks, 1 ms each). Placeholders. */
+export const FUNGUS_BANK = 250_000;
+export const FUNGUS_RESET = 1200;
+
+/** The kickback: how fast it sends the ball up the left outlane (m/s). Placeholder: enough to clear the lane (swept in the tests). */
+export const KICKBACK_SPEED = 2.4;

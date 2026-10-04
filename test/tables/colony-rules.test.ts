@@ -4,7 +4,7 @@ import { validateFlow } from "../../src/rules";
 import { advance, createGame, tick } from "../../src/sim/game";
 import { allTables, tableSetups } from "../../src/tables";
 import { colonyTable } from "../../src/tables/colony";
-import { CHAMBER_HOLD, CHAMBER_POINTS, KICK_ONLY, MAX_SCORE, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
+import { CHAMBER_HOLD, CHAMBER_POINTS, FUNGUS_BANK, FUNGUS_RESET, KICK_ONLY, MAX_SCORE, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
 import { colonyFlow, colonyRules } from "../../src/tables/colony-rules";
 import { harness } from "../rules/harness";
 
@@ -156,7 +156,7 @@ describe("the skill shot", () => {
     const paid = all.filter((sw) => !sw.startsWith("skill") && sw !== "kickbackL" && !/^(leaf|root)(Enter|Exit)$|^digEnter$/.test(sw) && !Object.hasOwn(CHAMBER_POINTS, sw)).sort(); // the ramps pay for the shot, not for the gates
     expect(Object.keys(SWITCH_POINTS).sort()).toEqual(paid);
     // the placeholders as they are now: a change is deliberate
-    expect(SWITCH_POINTS).toEqual({ slingL: 10_000, slingR: 10_000, inL: 25_000, inR: 25_000, outL: 5_000, outR: 5_000, bumper1: 5_000, bumper2: 5_000, bumper3: 5_000, scout: 50_000, rollW: 10_000, rollO: 10_000, rollR: 10_000 });
+    expect(SWITCH_POINTS).toEqual({ slingL: 10_000, slingR: 10_000, inL: 25_000, inR: 25_000, outL: 5_000, outR: 5_000, bumper1: 5_000, bumper2: 5_000, bumper3: 5_000, scout: 50_000, fungusL1: 25_000, fungusL2: 25_000, fungusL3: 25_000, fungusR1: 25_000, fungusR2: 25_000, fungusR3: 25_000, rollW: 10_000, rollO: 10_000, rollR: 10_000 });
   });
 
   it("pays each switch of the table exactly its points, a kicker switch only for a real kick, and closes the skill shot on every one of them", () => {
@@ -283,6 +283,47 @@ describe("the chambers (step 3b)", () => {
     h.take();
     h.run(10 + 3 * CHAMBER_HOLD);
     expect(h.cmds.some((c) => c.c === "releaseBall")).toBe(false);
+  });
+});
+
+describe("the Fungus Farm and the kickback (step 4)", () => {
+  it("puts a target down when it is hit and pays it, and pays the bank when the third is down, once, then brings the bank up after the reset time", () => {
+    const h = ball();
+    const before = score(h);
+    h.at(10).hit("fungusL1", 0, "hit").at(20).hit("fungusL2", 0, "hit").run(21);
+    expect(h.cmds).toContainEqual({ c: "dropTarget", id: "fungusL1", state: "down" });
+    expect(h.cmds).toContainEqual({ c: "dropTarget", id: "fungusL2", state: "down" });
+    expect(score(h) - before).toBe(2 * SWITCH_POINTS.fungusL1!);
+    h.at(30).hit("fungusL3", 0, "hit").run(31);
+    expect(score(h) - before).toBe(3 * SWITCH_POINTS.fungusL1! + FUNGUS_BANK);
+    h.take();
+    h.run(30 + FUNGUS_RESET - 1);
+    expect(h.cmds.some((c) => c.c === "dropBank")).toBe(false);
+    h.run(30 + FUNGUS_RESET + 2);
+    expect(h.cmds).toContainEqual({ c: "dropBank", bank: "fungusL" });
+  });
+
+  it("counts the two banks apart, and brings both up at a drain", () => {
+    const h = ball();
+    h.at(10).hit("fungusL1", 0, "hit").at(11).hit("fungusR1", 0, "hit").at(12).hit("fungusR2", 0, "hit").run(13);
+    const before = score(h);
+    h.at(14).hit("fungusL2", 0, "hit").run(15);
+    expect(score(h) - before).toBe(SWITCH_POINTS.fungusL2); // no bank bonus: two on the left, two on the right
+    h.take();
+    h.at(20).drain().run(21);
+    expect(h.cmds.filter((c) => c.c === "dropBank").map((c) => (c as { bank: string }).bank).sort()).toEqual(["fungusL", "fungusR"]);
+  });
+
+  it("kicks the ball up the lane at the kickback once per ball, and lets the next one go without a kick", () => {
+    const h = ball();
+    expect(h.state.lamps.kickbackL).toBe("lit");
+    h.at(10).hit("kickbackL", 0, "capture").run(11);
+    expect(h.cmds).toContainEqual({ c: "fireSolenoid", id: "kickbackL" });
+    expect(h.state.lamps.kickbackL).toBe("off");
+    h.take();
+    h.at(20).hit("kickbackL", 0, "capture").run(21);
+    expect(h.cmds).toContainEqual({ c: "releaseBall", lock: "kickbackL", speed: 0 });
+    expect(h.cmds.some((c) => c.c === "fireSolenoid")).toBe(false);
   });
 });
 

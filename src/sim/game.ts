@@ -116,11 +116,11 @@ function newBall(g: Game): Ball {
   return { ...makeBall(g.table, 0, 0), x: cx + p.dirx * gap, y: cy + p.diry * gap };
 }
 
-/** Sends the ball held in the sinkhole `id` out. Returns whether a ball was held. */
-export function kickTrigger(g: Game, id: string): boolean {
+/** Sends the ball held in the sinkhole `id` out, at its kick speed or at `speed`. Returns whether a ball was held. */
+export function kickTrigger(g: Game, id: string, speed?: number): boolean {
   const ti = g.table.triggerIds.indexOf(id);
   if (ti < 0) throw new Error(`unknown trigger "${id}"`);
-  return kickHeld(g.table.world, ti) >= 0;
+  return kickHeld(g.table.world, ti, speed) >= 0;
 }
 
 /** Switches the magnet `id` on or off. */
@@ -214,7 +214,7 @@ function applyCommands(g: Game, cmds: readonly Command[]): void {
     if (cmd.c === "magnet") setMagnet(g, cmd.id, cmd.on);
     else if (cmd.c === "dropTarget") setDropTarget(g, cmd.id, cmd.state);
     else if (cmd.c === "dropBank") resetDropBank(g, cmd.bank);
-    else if (cmd.c === "fireSolenoid") kickTrigger(g, cmd.id);
+    else if (cmd.c === "fireSolenoid") kickTrigger(g, cmd.id, cmd.speed);
     else if (cmd.c === "feedBall") {
       g.table.world.balls.push(newBall(g));
       g.arrivals += 1;
@@ -225,7 +225,7 @@ function applyCommands(g: Game, cmds: readonly Command[]): void {
       const b = g.table.world.balls[cmd.ball];
       if (!b || b.hold !== ti + 1) throw new Error(`lockBall "${cmd.lock}": ball ${cmd.ball} is not the ball held in that sinkhole`);
     } else if (cmd.c === "releaseBall") {
-      if (!kickTrigger(g, cmd.lock)) throw new Error(`releaseBall "${cmd.lock}": no ball is held in that sinkhole`);
+      if (!kickTrigger(g, cmd.lock, cmd.speed)) throw new Error(`releaseBall "${cmd.lock}": no ball is held in that sinkhole`);
     }
     g.outbox.push(cmd);
     g.applied += 1;
