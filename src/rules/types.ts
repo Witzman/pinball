@@ -28,9 +28,10 @@ export interface Cue {
 /** What the rules ask for. Plain data; sim applies the physical ones, leaves consume the rest. */
 export type Command =
   | { c: "setLamp"; lamp: string; state: "off" | "lit" | "flash" }
-  | { c: "fireSolenoid"; id: string }
+  /** Kicks out the ball held in the sinkhole `id`, at its kick speed or at `speed` (m/s). */
+  | { c: "fireSolenoid"; id: string; speed?: number }
   /** Kicks out the ball locked in the sinkhole `lock`; an error if none is held there. */
-  | { c: "releaseBall"; lock: string }
+  | { c: "releaseBall"; lock: string; speed?: number }
   | { c: "magnet"; id: string; on: boolean }
   /** Puts the drop target `id` (the `ref` of its walls or posts) down or up (#50); an error for an unknown id. */
   | { c: "dropTarget"; id: string; state: "up" | "down" }

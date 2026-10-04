@@ -3,7 +3,7 @@ import { advance, createGame, tick } from "../../src/sim/game";
 import type { Game } from "../../src/sim/game";
 import type { TableRules } from "../../src/rules";
 import { colonyRules } from "../../src/tables/colony-rules";
-import { CHAMBER_HOLD } from "../../src/tables/colony-scoring";
+import { CHAMBER_HOLD, FUNGUS_BANK, FUNGUS_RESET, KICKBACK_SPEED } from "../../src/tables/colony-scoring";
 import { allTables, tableSetups } from "../../src/tables";
 import { colonyTable } from "../../src/tables/colony";
 import { validateTable } from "../../src/table/validate";
@@ -47,7 +47,7 @@ describe("The Colony, step 1: the outline", () => {
   it("has a skill shot of three lane switches up the plunger lane, and the frozen switch names", () => {
     expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"], digRamp: ["digEnter", "digSite"] });
     const names = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : [])), ...(colonyTable.gates ?? []).flatMap((g) => (g.switch ? [g.switch] : []))].sort();
-    expect(names).toEqual(["brood", "bumper1", "bumper2", "bumper3", "digEnter", "digSite", "inL", "inR", "kickbackL", "leafEnter", "leafExit", "mushroom", "outL", "outR", "queen", "rollO", "rollR", "rollW", "rootEnter", "rootExit", "scout", "skill1", "skill2", "skill3", "slingL", "slingR"]);
+    expect(names).toEqual(["brood", "bumper1", "bumper2", "bumper3", "digEnter", "digSite", "fungusL1", "fungusL2", "fungusL3", "fungusR1", "fungusR2", "fungusR3", "inL", "inR", "kickbackL", "leafEnter", "leafExit", "mushroom", "outL", "outR", "queen", "rollO", "rollR", "rollW", "rootEnter", "rootExit", "scout", "skill1", "skill2", "skill3", "slingL", "slingR"]);
   });
 
   it("lets no ball rest for ever: balls dropped at rest over a grid all drain", () => {
@@ -147,7 +147,7 @@ describe("The Colony, step 1: the outline", () => {
     const { g, seen } = play();
     drop(g, 32, 900);
     drains(g);
-    expect(seen).toEqual(["outL", "kickbackL"]); // the kickback lane lies below the outlane rollover
+    expect(seen).toEqual(["outL", "kickbackL", "outL"]); // the kickback lane lies below the outlane rollover; the lit kickback sends the ball back up past it, and it drains in the end
   });
 
   it("lets each flipper lift a ball out of its inlane: some timing sends it far up the table, and without the press it drains", () => {
@@ -384,8 +384,9 @@ describe("The Colony, step 3b: the chambers", () => {
 
   it("pins the chambers' placement and kicks (placeholders: change them on purpose)", () => {
     expect(colonyTable.triggers!.filter((t) => t.hold).map((t) => [t.id, t.at, t.r, t.hold])).toEqual([
+      ["kickbackL", [32, 1005], 10, { kickDeg: -90, kickSpeed: 2.4 }],
       ["brood", [85, 665], 12, { kickDeg: -25, kickSpeed: 1.8 }],
-      ["queen", [260, 470], 12, { kickDeg: -110, kickSpeed: 1.6 }],
+      ["queen", [260, 470], 12, { kickDeg: -105, kickSpeed: 1.6 }],
       ["mushroom", [244, 555], 12, { kickDeg: 100, kickSpeed: 1.2 }],
       ["digSite", [422, 215], 12, { kickDeg: 90, kickSpeed: 0.8 }],
     ]);
@@ -542,5 +543,131 @@ describe("The Colony, step 3c: the Dig Ramp, the Dig Site and the Pull Bridge", 
     };
     expect(stays(true)).toBe(true);
     expect(stays(false)).toBe(false);
+  });
+});
+
+describe("The Colony, step 4: the Fungus Farm and the kickback", () => {
+  const targets = (side: "L" | "R") => colonyTable.walls.filter((w) => w.ref?.startsWith(`fungus${side}`));
+  const down = (g: Game) => Array.from(g.table.world.down);
+
+  it("has two banks of three drop targets in the art's target zones (x 130 to 170 and 320 to 360, y 500 to 590), mirrored about x = 244, either side of the Mushroom Hole", () => {
+    expect(colonyTable.dropBanks).toEqual({ fungusL: ["fungusL1", "fungusL2", "fungusL3"], fungusR: ["fungusR1", "fungusR2", "fungusR3"] });
+    for (const [side, x0, x1] of [["L", 130, 170], ["R", 320, 360]] as const) {
+      const ts = targets(side);
+      expect(ts, side).toHaveLength(3);
+      for (const t of ts) {
+        if (t.type !== "segment") throw new Error("a segment");
+        expect(t.switch).toBe(t.ref);
+        for (const p of [t.a, t.b]) {
+          expect(p[0], `${t.ref} x`).toBeGreaterThanOrEqual(x0);
+          expect(p[0], `${t.ref} x`).toBeLessThanOrEqual(x1);
+          expect(p[1], `${t.ref} y`).toBeGreaterThanOrEqual(500);
+          expect(p[1], `${t.ref} y`).toBeLessThanOrEqual(590);
+        }
+      }
+    }
+    const [l, r] = [targets("L"), targets("R")].map((ts) => ts.map((t) => (t.type === "segment" ? [t.a, t.b] : [])));
+    for (let i = 0; i < 3; i++) expect(r![i], `mirror ${i}`).toEqual(l![i]!.map(([x, y]) => [488 - x!, y!]));
+    const hole = colonyTable.triggers!.find((t) => t.id === "mushroom")!;
+    expect(hole.at[0]).toBe(244);
+  });
+
+  it("puts a target down when a ball hits it, and the ball passes where it stood", () => {
+    for (const [id, from, vx] of [["fungusL2", [105, 545], 0.9], ["fungusR2", [383, 545], -0.9]] as const) {
+      const { g, seen } = play();
+      g.table.world.gravity = 0;
+      Object.assign(g.table.world.balls[0]!, { x: from[0] / 1000, y: from[1] / 1000, vx, vy: 0, zone: 0 });
+      for (let i = 0; i < 400; i++) tick(g);
+      expect(seen, id).toContain(id);
+      const idx = g.table.dropIds.indexOf(id);
+      expect(g.table.world.down[idx], `${id} is down`).toBe(1);
+      expect(down(g).filter((d) => d === 1), `${id}: only that one`).toHaveLength(1);
+      // a second ball through the same place meets nothing there now
+      const again: string[] = [];
+      seen.length = 0;
+      Object.assign(g.table.world.balls[0]!, { x: from[0] / 1000, y: from[1] / 1000, vx, vy: 0, zone: 0 });
+      for (let i = 0; i < 400; i++) tick(g);
+      again.push(...seen);
+      expect(again.includes(id), `${id}: no second hit while down`).toBe(false);
+    }
+  });
+
+  it("pays a bank when its third target goes down, and brings the bank up after the reset time, not before", () => {
+    const { g, seen } = play();
+    g.table.world.gravity = 0;
+    // hit the three left targets one after the other, with the ball put in front of each
+    const starts: [number, number][] = [[105, 515], [115, 545], [125, 575]];
+    for (const [x, y] of starts) {
+      Object.assign(g.table.world.balls[0]!, { x: x / 1000, y: y / 1000, vx: 0.9, vy: 0, zone: 0 });
+      for (let i = 0; i < 300; i++) tick(g);
+    }
+    expect(seen.filter((s) => s.startsWith("fungusL"))).toEqual(["fungusL1", "fungusL2", "fungusL3"]);
+    const idxs = ["fungusL1", "fungusL2", "fungusL3"].map((id) => g.table.dropIds.indexOf(id));
+    expect(idxs.map((i) => g.table.world.down[i])).toEqual([1, 1, 1]);
+    for (let i = 0; i < FUNGUS_RESET - 400; i++) tick(g);
+    // not up before the time (the ball may still be rolling about; the targets do not care)
+    expect(idxs.map((i) => g.table.world.down[i]), "still down before the reset").toEqual([1, 1, 1]);
+    for (let i = 0; i < 600; i++) tick(g);
+    expect(idxs.map((i) => g.table.world.down[i]), "up again").toEqual([0, 0, 0]);
+    expect(FUNGUS_BANK).toBeLessThan(1_000_000);
+  });
+
+  it("lets no ball rest for ever with the left bank down, the right bank down, or both", () => {
+    for (const downIds of [["fungusL1", "fungusL2", "fungusL3"], ["fungusR1", "fungusR2", "fungusR3"], ["fungusL1", "fungusL2", "fungusL3", "fungusR1", "fungusR2", "fungusR3"]]) {
+      expect(restGrid(colonyTable, { x: [100, 400, 30], y: [450, 700, 30], ticks: 120000, create: (def) => createGame(def, { rules: colonyRules }), setup: (g) => { for (const id of downIds) g.table.world.down[g.table.dropIds.indexOf(id)] = 1; } }), downIds.join()).toEqual([]);
+    }
+  }, 120000);
+
+  it("can be reached by a flipper: some timing of some flipper hits a target of each bank", () => {
+    const sweep = (start: [number, number], button: "left" | "right", prefix: string) => {
+      let hit = 0;
+      for (let press = 200; press <= 1300; press += 25) {
+        const { g, seen } = play();
+        drop(g, start[0], start[1]);
+        for (let i = 0; i < 4000 && g.table.world.balls.length > 0; i++) {
+          g.input[button] = i >= press && i < press + 100;
+          tick(g);
+        }
+        if (seen.some((s) => s.startsWith(prefix))) hit++;
+      }
+      return hit;
+    };
+    const starts: [[number, number], "left" | "right"][] = [[[85, 760], "left"], [[403, 760], "right"], [[25, 480], "left"]];
+    for (const prefix of ["fungusL", "fungusR"]) expect(Math.max(...starts.map(([s, b]) => sweep(s, b, prefix))), prefix).toBeGreaterThan(0);
+  }, 240000);
+
+  it("kicks the ball up the left outlane when the kickback is lit (once per ball), well clear of the lane, with margin on the kick speed", () => {
+    const run = (speed: number) => {
+      const { g, seen } = play();
+      const t = g.table.world.triggers[g.table.triggerIds.indexOf("kickbackL")]!;
+      t.kickSpeed = speed;
+      drop(g, 32, 900);
+      let top = 2;
+      for (let i = 0; i < 3000 && g.table.world.balls.length > 0; i++) {
+        tick(g);
+        const b = g.table.world.balls[0];
+        if (b && seen.includes("kickbackL")) top = Math.min(top, b.y);
+      }
+      return { top: top * 1000, seen };
+    };
+    const real = run(KICKBACK_SPEED);
+    expect(real.seen.filter((s) => s === "kickbackL"), "caught once").toHaveLength(1);
+    expect(real.top, "the ball leaves the lane at the top (y < 700) ...").toBeLessThan(700);
+    // ... and a kick 25 % weaker would still leave it (margin)
+    expect(run(KICKBACK_SPEED * 0.75).top).toBeLessThan(770);
+    // a weak kick does not
+    expect(run(0.3).top).toBeGreaterThan(770);
+  });
+
+  it("lets a second ball at the kickback drain: the kickback is spent for the ball, the sinkhole lets it go without a kick", () => {
+    const { g, seen } = play();
+    drop(g, 32, 900);
+    // first time: kicked up; the ball comes down the lane again and is caught a second time
+    expect(drains(g, 40000)).toBe(true);
+    expect(seen.filter((s) => s === "kickbackL").length).toBeGreaterThanOrEqual(1);
+    const caught = seen.filter((s) => s === "kickbackL").length;
+    // every capture after the first is let go: the ball drains (it did), and at most a few catches
+    expect(caught).toBeLessThanOrEqual(3);
+    expect(g.drains).toBe(1);
   });
 });

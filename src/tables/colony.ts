@@ -1,4 +1,5 @@
 import type { TableDef } from "../table/schema";
+import { KICKBACK_SPEED } from "./colony-scoring";
 
 /**
  * THE COLONY, step 1 of #25: the outline. Every number is a placeholder: nobody has played
@@ -37,7 +38,10 @@ export const colonyTable: TableDef = {
     { type: "polyline", points: [[428, 770], [428, 838], [349.25, 891.8]], material: "metal" },
     { type: "segment", a: [378, 730], b: [358, 830], material: "rubber", switch: "slingR", kick: { speed: 1.6, minHit: 0.4, cooldownMs: 40 } },
     // the Scout: a standup target in the middle, slanted so no ball can rest on it, and down to the left so a ball that rolls off goes into the playfield
-    { type: "segment", a: [292, 580], b: [338, 560], material: "rubber", switch: "scout" },
+    { type: "segment", a: [270, 650], b: [316, 630], material: "rubber", switch: "scout" },
+    // the Fungus Farm (step 4): two banks of three drop targets either side of the Mushroom Hole, each a slanted line (no ball rests on it), the left one leaning right, the right one its mirror about x = 244; down, they let the ball through
+    ...[0, 1, 2].map((i) => ({ type: "segment" as const, a: [135 + 10 * i, 500 + 30 * i] as [number, number], b: [145 + 10 * i, 530 + 30 * i] as [number, number], material: "rubber", switch: `fungusL${i + 1}`, ref: `fungusL${i + 1}` })),
+    ...[0, 1, 2].map((i) => ({ type: "segment" as const, a: [353 - 10 * i, 500 + 30 * i] as [number, number], b: [343 - 10 * i, 530 + 30 * i] as [number, number], material: "rubber", switch: `fungusR${i + 1}`, ref: `fungusR${i + 1}` })),
     // the Leaf Ramp (left, zone 1): rails 60 mm apart from y=500 up to y=300; the ball rolls up it, over the playfield, and out at the top
     { type: "segment", a: [40, 500], b: [40, 300], material: "metal", zones: [1] },
     { type: "segment", a: [100, 500], b: [100, 300], material: "metal", zones: [1] },
@@ -57,7 +61,8 @@ export const colonyTable: TableDef = {
   ],
   triggers: [
     { id: "outL", at: [32, 960], r: 12, switch: "outL" },
-    { id: "kickbackL", at: [32, 1005], r: 10, switch: "kickbackL" },
+    // the kickback: a sinkhole at the foot of the left outlane; the rules kick the ball up the lane when the kickback is lit, and let it go (no kick) when not
+    { id: "kickbackL", at: [32, 1005], r: 10, switch: "kickbackL", hold: { kickDeg: -90, kickSpeed: KICKBACK_SPEED } },
     { id: "inL", at: [85, 810], r: 10, switch: "inL" },
     { id: "inR", at: [403, 810], r: 10, switch: "inR" },
     { id: "outR", at: [455, 960], r: 12, switch: "outR" },
@@ -68,8 +73,8 @@ export const colonyTable: TableDef = {
     // the chambers (step 3b): sinkholes a ball sits in until the rules kick it out. Their names are the lock ids and the switches. Placeholders: where they are, how hard they kick.
     // Brood Chamber, lower left, under the upper flipper; kicks across the table to the right
     { id: "brood", at: [85, 665], r: 12, switch: "brood", hold: { kickDeg: -25, kickSpeed: 1.8 } },
-    // Queen's Chamber, in the middle under the pop bumpers; kicks up and left into the bumpers
-    { id: "queen", at: [260, 470], r: 12, switch: "queen", hold: { kickDeg: -110, kickSpeed: 1.6 } },
+    // Queen's Chamber, in the middle under the pop bumpers; kicks up and left into the bumpers (-105: at -110 a ball looped between the Queen and the bumpers for ever once the right Fungus bank was down)
+    { id: "queen", at: [260, 470], r: 12, switch: "queen", hold: { kickDeg: -105, kickSpeed: 1.6 } },
     // Mushroom Hole, between the two banks of the Fungus Farm (step 4); kicks down towards the flippers
     { id: "mushroom", at: [244, 555], r: 12, switch: "mushroom", hold: { kickDeg: 100, kickSpeed: 1.2 } },
     // the Dig Site (step 3c), at the top of the Dig Ramp: a ball sits in it until the rules kick it out; it kicks down the ramp, so the ball rolls out of the mouth
@@ -105,6 +110,7 @@ export const colonyTable: TableDef = {
     // the upper flipper, on the left wall; it follows the left button
     { id: "upperLeft", pivot: [16, 600], length: 58, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber", input: "left" },
   ],
+  dropBanks: { fungusL: ["fungusL1", "fungusL2", "fungusL3"], fungusR: ["fungusR1", "fungusR2", "fungusR3"] },
   sounds: { slingL: "sling", slingR: "sling", scout: "target" },
   shots: { skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"], digRamp: ["digEnter", "digSite"] },
 };

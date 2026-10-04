@@ -1,6 +1,6 @@
 import type { FlowConfig, TableRules } from "../rules";
 import { demoFlow } from "./demo-rules";
-import { BRIDGE_HOLD, CHAMBER_HOLD, CHAMBER_POINTS, KICK_ONLY, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
+import { BRIDGE_HOLD, CHAMBER_HOLD, FUNGUS_BANK, FUNGUS_RESET, CHAMBER_POINTS, KICK_ONLY, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
 
 /** The proving ground's flow with the Colony's replay score; the rest are still placeholders. */
 export const colonyFlow: FlowConfig = { ...demoFlow, replayScore: REPLAY_SCORE };
@@ -43,6 +43,39 @@ function chamber(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], e: { 
   c.after(e.sw, CHAMBER_HOLD);
 }
 
+/** A standup of the Fungus Farm that is hit goes down; the third of a bank pays the bank and brings it up again after FUNGUS_RESET ticks. */
+const FUNGUS = /^fungus([LR])([123])$/;
+function fungus(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], e: { sw: string; kind: string }): void {
+  const m = FUNGUS.exec(e.sw);
+  if (!m || e.kind === "gateBA") return;
+  const bank = `fungus${m[1]}`;
+  if (c.count(`down:${e.sw}`) > 0) return; // one hit per target, until the bank is up again
+  c.add(`down:${e.sw}`);
+  c.emit({ c: "dropTarget", id: e.sw, state: "down" });
+  c.add(bank);
+  if (c.count(bank) === 3) {
+    c.addScore(FUNGUS_BANK);
+    c.emit({ c: "dmd", show: { id: "fungusBank", args: { bank, points: FUNGUS_BANK } } });
+    c.after(bank, FUNGUS_RESET);
+  }
+}
+
+function bankUp(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], bank: string): void {
+  for (let i = 1; i <= 3; i++) c.reset(`down:${bank}${i}`);
+  c.reset(bank);
+  c.emit({ c: "dropBank", bank });
+}
+
+/** The kickback: a ball at the foot of the left outlane is kicked up the lane once per ball (the lamp is lit at the start of the ball), else let go to drain. */
+function kickbackShot(c: Parameters<NonNullable<TableRules["onBallStart"]>>[0], e: { sw: string; kind: string }): void {
+  if (e.sw !== "kickbackL" || e.kind !== "capture") return;
+  if (c.lamp("kickbackL") === "lit") {
+    c.setLamp("kickbackL", "off");
+    c.emit({ c: "fireSolenoid", id: "kickbackL" });
+    c.emit({ c: "dmd", show: { id: "kickback" } });
+  } else c.emit({ c: "releaseBall", lock: "kickbackL", speed: 0 });
+}
+
 /**
  * The Colony so far: the skill shot. Each ball lights one of the three lanes up the plunger
  * lane at random (seeded, part of the state); reaching the lit lane before anything else on
@@ -56,6 +89,7 @@ export const colonyRules: TableRules = {
     // a ball the saver serves again is the same ball: no second skill shot (a new ball clears the counters)
     if (c.count("skillTried") > 0) return;
     c.add("skillTried");
+    c.setLamp("kickbackL", "lit");
     c.add("skillOpen");
     const lit = LANES[Math.floor(c.rnd() * LANES.length)]!;
     for (const l of LANES) c.setLamp(l, l === lit ? "lit" : "off");
@@ -73,6 +107,8 @@ export const colonyRules: TableRules = {
     closeSkill(c);
     ramp(c, e);
     chamber(c, e);
+    fungus(c, e);
+    kickbackShot(c, e);
     const points = Object.hasOwn(SWITCH_POINTS, e.sw) ? SWITCH_POINTS[e.sw]! : 0;
     if (points > 0 && (e.kind === "kick" || !KICK_ONLY.has(e.sw))) c.addScore(points);
   },
@@ -88,6 +124,10 @@ export const colonyRules: TableRules = {
     }
   },
   onTimer(c, id) {
+    if (id === "fungusL" || id === "fungusR") {
+      bankUp(c, id);
+      return;
+    }
     if (id === "pullBridge") {
       c.emit({ c: "magnet", id: "pullBridge", on: false });
       return;
@@ -105,6 +145,10 @@ export const colonyRules: TableRules = {
     for (const id of Object.keys(CHAMBER_POINTS)) {
       c.reset(`held:${id}`);
       c.cancel(id);
+    }
+    for (const bank of ["fungusL", "fungusR"]) {
+      c.cancel(bank);
+      bankUp(c, bank);
     }
     c.cancel("pullBridge");
     c.emit({ c: "magnet", id: "pullBridge", on: false });
