@@ -47,6 +47,8 @@ export interface Snapshot {
   flippers: FlipperView[];
   plunger: { x: number; y: number; dirx: number; diry: number; halfWidth: number; pos: number } | null;
   magnets: { x: number; y: number; r: number; on: boolean }[];
+  /** Drop targets, 1 = down, by `StaticScene.walls[].drop - 1`; empty without drop targets. */
+  down: number[];
   lamps: Record<string, LitState>;
   /** The text the player reads, and what it depends on; built by the app from the rules state. */
   hud: { lines: string[]; tilted: boolean; phase: string };
@@ -59,7 +61,7 @@ export interface Snapshot {
 export interface StaticScene {
   width: number;
   length: number;
-  walls: { ax: number; ay: number; bx: number; by: number; kind: "wall" | "rubber" | "switch"; zoneMask: number; sw: string | null }[];
+  walls: { ax: number; ay: number; bx: number; by: number; kind: "wall" | "rubber" | "switch"; zoneMask: number; sw: string | null; /** Drop target (#50): 1 + its index into `Snapshot.down`; 0 = a fixed wall. */ drop: number }[];
   posts: { x: number; y: number; r: number; kind: "post" | "switch"; zoneMask: number; /** The switch it reports, for effects; null if none. */ sw: string | null }[];
   triggers: { id: string; x: number; y: number; r: number; hold: boolean }[];
   /** Height of each zone's level above the playfield, metres. */
@@ -73,7 +75,7 @@ export function buildScene(table: LoadedTable): StaticScene {
   return {
     width: table.playfieldWidth,
     length: table.playfieldLength,
-    walls: w.segments.map((s) => ({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, kind: s.sw > 0 ? "switch" : s.e > 0.5 ? "rubber" : "wall", zoneMask: s.zoneMask, sw: s.sw > 0 ? table.switchNames[s.sw - 1]! : null })),
+    walls: w.segments.map((s) => ({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, kind: s.sw > 0 ? "switch" : s.e > 0.5 ? "rubber" : "wall", zoneMask: s.zoneMask, sw: s.sw > 0 ? table.switchNames[s.sw - 1]! : null, drop: s.drop ?? 0 })),
     posts: w.circles.map((c) => ({ x: c.x, y: c.y, r: c.r, kind: c.sw > 0 ? "switch" : "post", zoneMask: c.zoneMask, sw: c.sw > 0 ? table.switchNames[c.sw - 1]! : null })),
     triggers: w.triggers.map((t, i) => ({ id: table.triggerIds[i]!, x: t.x, y: t.y, r: t.r, hold: t.hold })),
     heights: [...table.heights],
@@ -123,6 +125,7 @@ export function snapshot(g: Game, hudLines: readonly string[] = [], cameraMode: 
     flippers: w.flippers.map((f) => ({ px: f.px, py: f.py, tx: f.tx, ty: f.ty, dx: f.dx, dy: f.dy, k: f.k, cs: f.cs, r0: f.r0, r1: f.r1, up: f.on })),
     plunger: p ? { x: p.x, y: p.y, dirx: p.dirx, diry: p.diry, halfWidth: p.halfWidth, pos: p.pos } : null,
     magnets: w.magnets.map((m) => ({ x: m.x, y: m.y, r: m.r, on: m.on })),
+    down: Array.from(w.down),
     lamps: { ...g.rules.state.lamps },
     hud: { lines: [...hudLines], tilted: game?.tilted === true, phase: game?.phase ?? "" },
     hits: events.flatMap((e) => (e.a === "switch" ? [{ sw: e.sw, s: e.s, kick: e.kind === "kick" }] : [])),

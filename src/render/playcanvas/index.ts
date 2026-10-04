@@ -173,6 +173,8 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     parts: { mat: pc.StandardMaterial; base: number; boost: number }[];
   }
   const flashes = new Map<string, Flash>();
+  /** The drawn bar of each drop target (#50), by drop index: it sinks into the playfield while the target is down. */
+  const dropBars: { ent: pc.Entity; x: number; z: number; len: number; yaw: number; level: number }[] = [];
   const flashFor = (sw: string): Flash => {
     let f = flashes.get(sw);
     if (!f) {
@@ -208,6 +210,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     }
     inserts.clear();
     flashes.clear();
+    dropBars.length = 0;
     const g = new pc.Entity("static");
     root.addChild(g);
     built = g;
@@ -259,6 +262,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
         const own = (wl.kind === "rubber" ? mats.rubber : mats.amber).clone() as pc.StandardMaterial;
         const e = add(g, "box", own);
         place(e, (ax + bx) / 2, RAIL_H * 0.45, (az + bz) / 2, len, RAIL_H * 0.9, RAIL_T * 1.1, yaw);
+        if (wl.drop > 0) dropBars[wl.drop - 1] = { ent: e, x: (ax + bx) / 2, z: (az + bz) / 2, len, yaw, level: 1 };
         if (wl.sw !== null) flashFor(wl.sw).parts.push({ mat: own, base: own.emissiveIntensity, boost: 3.5 });
       }
     }
@@ -470,6 +474,11 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     },
     draw(snap) {
       snap.flippers.forEach((f, i) => updateFlipper(i, f));
+      dropBars.forEach((d, i) => {
+        if (!d) return;
+        d.level += ((snap.down[i] === 1 ? 0.12 : 1) - d.level) * 0.35; // a quick sink and rise, not a jump
+        place(d.ent, d.x, RAIL_H * 0.45 * d.level, d.z, d.len, RAIL_H * 0.9 * d.level, RAIL_T * 1.1, d.yaw);
+      });
       while (balls.length < snap.balls.length) balls.push(add(dyn, "sphere", mats.ball));
       balls.forEach((e, i) => {
         const b = snap.balls[i];

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { advance, createGame } from "../../src/sim/game";
+import { advance, createGame, setDropTarget } from "../../src/sim/game";
 import { cameraFor, tiltedCamera, topCamera } from "../../src/sim/camera";
 import { ballHeight, buildScene, snapshot } from "../../src/sim/snapshot";
 import { demoTable } from "../../src/tables/demo";
+import { colonyTable } from "../../src/tables/colony";
 import { tableSetups } from "../../src/tables";
 
 function played() {
@@ -230,5 +231,17 @@ describe("effects data for a renderer", () => {
     ] as const;
     expect(snapshot(g, [], "top", events).hits).toEqual([{ sw: "bumper1", s: 0.7, kick: true }, { sw: "target1", s: 0.2, kick: false }]);
     expect(snapshot(g).hits).toEqual([]);
+  });
+
+  it("shows drop targets (#50): the scene marks their walls and the snapshot says which are down", () => {
+    const g = createGame(colonyTable, tableSetups.colony);
+    const walls = buildScene(g.table).walls.filter((w) => w.drop > 0);
+    expect(walls.map((w) => w.drop).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(snapshot(g).down).toEqual([0, 0, 0, 0, 0, 0]);
+    setDropTarget(g, "fungusL2", "down");
+    const i = g.table.dropIds.indexOf("fungusL2");
+    expect(snapshot(g).down[i]).toBe(1);
+    expect(snapshot(g).down.filter((d) => d === 1)).toHaveLength(1);
+    expect(buildScene(createGame(demoTable, tableSetups.demo).table).walls.every((w) => w.drop === 0)).toBe(true);
   });
 });
