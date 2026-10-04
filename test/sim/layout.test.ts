@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { touchZone } from "../../src/input/input";
 import { drawHud } from "../../src/render/hud";
@@ -13,6 +14,12 @@ describe("layout", () => {
     expect(l.cameraRect).toEqual({ x: 0, y: l.band, w: W, h: H - l.band });
     expect(touchZone(10, l.cameraRect.y - 0.001, W, H)).toBe("coin");
     expect(touchZone(10, l.cameraRect.y + 0.001, W, H)).toBeNull();
+  });
+
+  it("keeps the 3D view out of the band (#53): the PlayCanvas camera draws into the part of the screen below the band, and frames the table for that part's aspect (no WebGL in the tests, so the source is pinned)", () => {
+    const src = readFileSync("src/render/playcanvas/index.ts", "utf8");
+    expect(src).toContain("camera.camera!.rect = new pc.Vec4(0, 0, 1, 1 - MACHINE_BAND)");
+    expect(src).toContain("w / (h * (1 - MACHINE_BAND))");
   });
 
   it("is the one source of the touch zones: every point is the zone the numbers say", () => {

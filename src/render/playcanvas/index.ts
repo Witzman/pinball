@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { MACHINE_BAND } from "../../sim/layout";
 import type { FlipperView, Snapshot, StaticScene } from "../../sim/snapshot";
 import { drawHud } from "../hud";
 import type { Renderer } from "../renderer";
@@ -83,6 +84,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
   const camera = new pc.Entity("camera");
   camera.addComponent("camera", { fov: 50, nearClip: 5, farClip: 600, clearColor: new pc.Color(0, 0, 0) });
   app.root.addChild(camera);
+  camera.camera!.rect = new pc.Vec4(0, 0, 1, 1 - MACHINE_BAND); // the table is drawn below the band of the machine buttons (#53); rect is from the bottom left
   try {
     const frame = new pc.CameraFrame(app, camera.camera!);
     frame.rendering.toneMapping = pc.TONEMAP_ACES;
@@ -438,7 +440,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     const key = `${w}x${h} ${fov} ${pitch} ${sceneW} ${sceneL}`;
     if (key !== framedFor) {
       framedFor = key;
-      distance = fitDistance(pitch, fov, w / h, sceneW * S, sceneL * S, RAIL_H * 3, [[(-sceneW * S) / 2, 20, (-sceneL * S) / 2], [(sceneW * S) / 2, 20, (-sceneL * S) / 2]]);
+      distance = fitDistance(pitch, fov, w / (h * (1 - MACHINE_BAND)), sceneW * S, sceneL * S, RAIL_H * 3, [[(-sceneW * S) / 2, 20, (-sceneL * S) / 2], [(sceneW * S) / 2, 20, (-sceneL * S) / 2]]);
     }
     camera.camera!.fov = fov;
     // the view leans a little toward the ball, eased so it never jerks
