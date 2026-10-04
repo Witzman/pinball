@@ -1,6 +1,6 @@
 import type { FlowConfig, TableRules } from "../rules";
 import { demoFlow } from "./demo-rules";
-import { BRIDGE_HOLD, CHAMBER_HOLD, FUNGUS_BANK, FUNGUS_RESET, CHAMBER_POINTS, KICK_ONLY, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
+import { BRIDGE_HOLD, LOOP_SHOT, TRAIL_SHOT, CHAMBER_HOLD, FUNGUS_BANK, FUNGUS_RESET, CHAMBER_POINTS, KICK_ONLY, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "./colony-scoring";
 
 /** The proving ground's flow with the Colony's replay score; the rest are still placeholders. */
 export const colonyFlow: FlowConfig = { ...demoFlow, replayScore: REPLAY_SCORE };
@@ -113,6 +113,11 @@ export const colonyRules: TableRules = {
     if (points > 0 && (e.kind === "kick" || !KICK_ONLY.has(e.sw))) c.addScore(points);
   },
   onShot(c, shot) {
+    if (shot === "trailWest" || shot === "trailEast" || shot === "pheromoneLoop") {
+      const points = shot === "pheromoneLoop" ? LOOP_SHOT : TRAIL_SHOT;
+      c.addScore(points);
+      c.emit({ c: "dmd", show: { id: shot, args: { points } } });
+    }
     if (shot === "leafRamp") { // the ball comes back down the left side: the Pull Bridge holds it at the upper flipper for the Dig Ramp shot
       c.emit({ c: "magnet", id: "pullBridge", on: true });
       c.after("pullBridge", BRIDGE_HOLD);

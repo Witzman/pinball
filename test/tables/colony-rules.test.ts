@@ -153,10 +153,10 @@ describe("the skill shot", () => {
 
   it("has points for every switch of the table except the skill lanes (they pay the skill shot) and the kickback lane", () => {
     const all = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : [])), ...(colonyTable.gates ?? []).flatMap((g) => (g.switch ? [g.switch] : []))];
-    const paid = all.filter((sw) => !sw.startsWith("skill") && sw !== "kickbackL" && !/^(leaf|root)(Enter|Exit)$|^digEnter$/.test(sw) && !Object.hasOwn(CHAMBER_POINTS, sw)).sort(); // the ramps pay for the shot, not for the gates
+    const paid = all.filter((sw) => !sw.startsWith("skill") && sw !== "kickbackL" && !/^(leaf|root)(Enter|Exit)$|^digEnter$|^orbit[WE](In|Out)$|^loop[LR]$/.test(sw) && !Object.hasOwn(CHAMBER_POINTS, sw)).sort(); // the ramps pay for the shot, not for the gates
     expect(Object.keys(SWITCH_POINTS).sort()).toEqual(paid);
     // the placeholders as they are now: a change is deliberate
-    expect(SWITCH_POINTS).toEqual({ slingL: 10_000, slingR: 10_000, inL: 25_000, inR: 25_000, outL: 5_000, outR: 5_000, bumper1: 5_000, bumper2: 5_000, bumper3: 5_000, scout: 50_000, fungusL1: 25_000, fungusL2: 25_000, fungusL3: 25_000, fungusR1: 25_000, fungusR2: 25_000, fungusR3: 25_000, rollW: 10_000, rollO: 10_000, rollR: 10_000 });
+    expect(SWITCH_POINTS).toEqual({ slingL: 10_000, slingR: 10_000, inL: 25_000, inR: 25_000, outL: 5_000, outR: 5_000, bumper1: 5_000, bumper2: 5_000, bumper3: 5_000, scout: 50_000, spinW: 5_000, spinE: 5_000, fungusL1: 25_000, fungusL2: 25_000, fungusL3: 25_000, fungusR1: 25_000, fungusR2: 25_000, fungusR3: 25_000, rollW: 10_000, rollO: 10_000, rollR: 10_000 });
   });
 
   it("pays each switch of the table exactly its points, a kicker switch only for a real kick, and closes the skill shot on every one of them", () => {

@@ -32,6 +32,8 @@ export const SWITCH_POINTS: Record<string, number> = {
   fungusR1: 25_000,
   fungusR2: 25_000,
   fungusR3: 25_000,
+  spinW: 5_000,
+  spinE: 5_000,
   rollW: 10_000,
   rollO: 10_000,
   rollR: 10_000,
@@ -55,3 +57,7 @@ export const FUNGUS_RESET = 1200;
 
 /** The kickback: how fast it sends the ball up the left outlane (m/s). Placeholder: enough to clear the lane (swept in the tests). */
 export const KICKBACK_SPEED = 2.4;
+
+/** A trail shot (up an orbit past its spinner) and the Pheromone Loop (left to right under the dome); placeholders. */
+export const TRAIL_SHOT = 100_000;
+export const LOOP_SHOT = 150_000;

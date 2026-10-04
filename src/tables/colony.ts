@@ -79,6 +79,16 @@ export const colonyTable: TableDef = {
     { id: "mushroom", at: [244, 555], r: 12, switch: "mushroom", hold: { kickDeg: 100, kickSpeed: 1.2 } },
     // the Dig Site (step 3c), at the top of the Dig Ramp: a ball sits in it until the rules kick it out; it kicks down the ramp, so the ball rolls out of the mouth
     { id: "digSite", at: [422, 215], r: 12, zones: [3], switch: "digSite", hold: { kickDeg: 90, kickSpeed: 0.8 } },
+    // the orbits (step 2b): rollovers along the side corridors, no guide walls of their own. Trail West: up the left edge past the Leaf Ramp (in, spinner, out), fed by the upper left flipper; Trail East: up the right edge beside the Dig Ramp, fed by the upper right flipper (the lower flippers cannot get a ball in: the ramp mouths and the slings are in the way). The spinners are rollovers the rules count.
+    { id: "orbitWIn", at: [33, 545], r: 14, switch: "orbitWIn" },
+    { id: "spinW", at: [33, 420], r: 14, switch: "spinW" },
+    { id: "orbitWOut", at: [33, 235], r: 14, switch: "orbitWOut" },
+    { id: "orbitEIn", at: [455, 500], r: 14, switch: "orbitEIn" },
+    { id: "spinE", at: [455, 400], r: 14, switch: "spinE" },
+    { id: "orbitEOut", at: [455, 290], r: 14, switch: "orbitEOut" },
+    // the Pheromone Loop: two rollovers under the dome, left and right; left then right is the loop (a ball from the plunger comes round right to left and does not count)
+    { id: "loopL", at: [82, 100], r: 12, switch: "loopL" },
+    { id: "loopR", at: [438, 100], r: 12, switch: "loopR" },
     // the skill shot: three rollovers up the plunger lane, the harder the pull the further the ball gets
     { id: "skill1", at: [499, 700], r: 10, switch: "skill1" },
     { id: "skill2", at: [499, 500], r: 10, switch: "skill2" },
@@ -109,8 +119,10 @@ export const colonyTable: TableDef = {
     { id: "right", pivot: [354, 900], length: 70, rBase: 9.5, rTip: 5, restDeg: 150, activeDeg: 200, upMs: 40, downMs: 100, material: "rubber" },
     // the upper flipper, on the left wall; it follows the left button
     { id: "upperLeft", pivot: [16, 600], length: 58, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber", input: "left" },
+    // the upper right flipper (step 2b), the mirror of the upper left one about x = 244, 30 mm higher so its tip stays clear of the Root Ramp mouth (y 640), on the plunger lane wall; it follows the right button and feeds the East lane
+    { id: "upperRight", pivot: [472, 570], length: 45, rBase: 9.5, rTip: 5, restDeg: 150, activeDeg: 210, upMs: 40, downMs: 100, material: "rubber", input: "right" },
   ],
   dropBanks: { fungusL: ["fungusL1", "fungusL2", "fungusL3"], fungusR: ["fungusR1", "fungusR2", "fungusR3"] },
   sounds: { slingL: "sling", slingR: "sling", scout: "target" },
-  shots: { skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"], digRamp: ["digEnter", "digSite"] },
+  shots: { trailWest: ["orbitWIn", "spinW"], trailEast: ["orbitEIn", "spinE"], pheromoneLoop: ["loopL", "loopR"], skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"], digRamp: ["digEnter", "digSite"] },
 };
