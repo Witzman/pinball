@@ -24,6 +24,14 @@ describe("lamps", () => {
     expect(h.cmds.map((c) => (c as { state: string }).state)).toEqual(["lit", "off", "lit", "off", "lit"]);
   });
 
+  it("tells the leaves lit, flash and off apart, and again only when what they show changes", () => {
+    const steps = ["flash", "flash", "lit", "flash", "collected", "flash", "off"] as const;
+    const h = harness({ modes: {}, onSwitch: (c, e) => c.setLamp("l", steps[Number(e.sw)]!) });
+    for (let i = 0; i < steps.length; i++) h.at(i + 1).hit(String(i));
+    h.run(20);
+    expect(h.cmds.map((c) => (c as { state: string }).state)).toEqual(["flash", "lit", "flash", "off", "flash", "off"]);
+  });
+
   it("reads off for a lamp never set", () => {
     let seen = "";
     const h = harness({ modes: {}, onSwitch: (c) => { seen = c.lamp("nothing"); } });

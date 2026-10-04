@@ -4,7 +4,7 @@ import type { FlipperView, Snapshot, StaticScene } from "../../sim/snapshot";
 import { drawHud } from "../hud";
 import type { Renderer } from "../renderer";
 import { backglassTexture, drawDisplay, glowTexture, playfieldTexture, studioSky } from "./art";
-import { fitDistance } from "./frame";
+import { fitDistance, lampLevel } from "./frame";
 import { rampGeometry } from "./ramp";
 import rampPlasticUrl from "./assets/ramp-plastic.webp";
 import playfieldUrl from "./assets/playfield-colony.webp";
@@ -191,7 +191,6 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
   const insertColor = (id: string): [number, number, number] => (id.startsWith("skill") ? [0.2, 1, 0.35] : id.startsWith("roll") ? [1, 0.9, 0.2] : id.startsWith("kick") ? [1, 0.2, 0.15] : [1, 0.55, 0.12]);
   const SHAKE_MS = 450;
   const SHAKE_CM = 1.2;
-  const LAMP_LEVEL = { off: 0.25, lit: 1.2, flash: 1.2, collected: 0.5 } as const;
 
   let flipperEntities: pc.Entity[][] = [];
   const balls: pc.Entity[] = [];
@@ -536,7 +535,7 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
       for (let i = snap.balls.length; i < trails.length; i++) trails[i]?.ents.forEach((e) => (e.enabled = false));
       for (const [id, ins] of inserts) {
         const lamp = snap.lamps[id] ?? "off";
-        const level = LAMP_LEVEL[lamp];
+        const level = lampLevel(lamp, snap.tick);
         if (level !== ins.level) {
           ins.level = level;
           ins.discMat.emissiveIntensity = level * 1.6;

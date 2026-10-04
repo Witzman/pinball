@@ -15,7 +15,7 @@ function ball(seed = 1) {
   h.take();
   return h;
 }
-const lit = (h: ReturnType<typeof ball>) => ["skill1", "skill2", "skill3"].filter((l) => h.state.lamps[l] === "lit");
+const lit = (h: ReturnType<typeof ball>) => ["skill1", "skill2", "skill3"].filter((l) => h.state.lamps[l] === "flash");
 const score = (h: ReturnType<typeof ball>) => h.state.player.score;
 
 describe("the scoring scale of The Colony (#46)", () => {
@@ -79,6 +79,15 @@ describe("the skill shot", () => {
     next.at(10).drain().run(11);
     next.at(4000).ballAtPlunger().run(4001);
     expect(lit(next)).toHaveLength(1);
+  });
+
+  it("shows the open lane as flashing to the leaves, and stops the flash when the window closes", () => {
+    const h = harness(colonyRules, { flow: colonyFlow, shots: colonyTable.shots });
+    h.at(1).button("start", true).at(2).ballAtPlunger().run(3);
+    const l = lit(h)[0]!;
+    expect(h.cmds).toContainEqual({ c: "setLamp", lamp: l, state: "flash" });
+    h.at(10).hit("slingL", 0, "kick").run(11);
+    expect(h.cmds).toContainEqual({ c: "setLamp", lamp: l, state: "off" });
   });
 
   it("awards a million for reaching the lit lane first, once, and tells the display", () => {
