@@ -461,7 +461,7 @@ describe("The Colony, step 3c: the Dig Ramp, the Dig Site and the Pull Bridge", 
   it("lets a ball roll up the Dig Ramp into the Dig Site: the rules hear digEnter and digSite, the shot is digRamp, the ball is held in zone 3", () => {
     const shots: string[] = [];
     const seen: string[] = [];
-    const rules: TableRules = { ...colonyRules, onSwitch: (c, e) => { seen.push(e.sw); colonyRules.onSwitch?.(c, e); }, onShot: (c, s) => { shots.push(s); colonyRules.onShot?.(c, s); } };
+    const rules: TableRules = { ...colonyRules, onSwitch: (c, e) => { seen.push(e.sw); colonyRules.onSwitch?.(c, e); }, onShot: (c, s, e) => { shots.push(s); colonyRules.onShot?.(c, s, e); } };
     const g = createGame(colonyTable, { rules });
     Object.assign(g.table.world.balls[0]!, { x: 0.422, y: 0.4, vx: 0, vy: -1.6, zone: 0 });
     for (let i = 0; i < 600; i++) tick(g);
