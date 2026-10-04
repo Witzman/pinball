@@ -4,7 +4,7 @@ import { validateFlow } from "../../src/rules";
 import { advance, createGame, tick } from "../../src/sim/game";
 import { allTables, tableSetups } from "../../src/tables";
 import { colonyTable } from "../../src/tables/colony";
-import { CHAMBER_HOLD, CHAMBER_POINTS, FUNGUS_BANK, FUNGUS_RESET, KICK_ONLY, MAX_SCORE, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
+import { TRAIL_AWARD, TRAIL_WINDOW, CHAMBER_HOLD, CHAMBER_POINTS, FUNGUS_BANK, FUNGUS_RESET, KICK_ONLY, MAX_SCORE, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
 import { colonyFlow, colonyRules } from "../../src/tables/colony-rules";
 import { harness } from "../rules/harness";
 
@@ -180,10 +180,10 @@ describe("the skill shot", () => {
     expect(score(h)).toBe(0); // the mouth alone pays nothing
     h.at(20).hit("leafExit", 0, "gateAB").run(21);
     expect(score(h)).toBe(RAMP_SHOT);
-    h.at(30).hit("rootEnter", 0, "gateAB").at(40).hit("rootExit", 0, "gateAB").run(41);
-    expect(score(h)).toBe(2 * RAMP_SHOT);
+    h.at(30).hit("rootEnter", 0, "gateAB").at(40).hit("rootExit", 0, "gateAB").run(41); // the two ramps in a row are also a trail (#26)
+    expect(score(h)).toBe(2 * RAMP_SHOT + TRAIL_AWARD[2]);
     h.at(50).hit(l).run(51); // the window is closed
-    expect(score(h)).toBe(2 * RAMP_SHOT);
+    expect(score(h)).toBe(2 * RAMP_SHOT + TRAIL_AWARD[2]);
     expect(h.cmds.filter((c) => c.c === "dmd" && (c.show.id === "leafRamp" || c.show.id === "rootRamp"))).toHaveLength(2);
   });
 
@@ -384,5 +384,84 @@ describe("the skill shot on the physical table", () => {
     expect(lanes(110)[0]).toBe("skill1");
     expect(lanes(110)).not.toContain("skill3");
     expect(lanes(300).slice(0, 3)).toEqual(["skill1", "skill2", "skill3"]);
+  });
+});
+
+describe("the Pheromone Trail (#26)", () => {
+  const W = ["orbitWIn", "spinW"] as const;
+  const E = ["orbitEIn", "spinE"] as const;
+  const L = ["loopL", "loopR"] as const;
+  const trails = (h: ReturnType<typeof ball>) => h.cmds.flatMap((c) => (c.c === "dmd" && c.show.id === "trail" ? [c.show.args as { name: string; length: number; scent: number; points: number }] : []));
+  /** Plays the shots one after the other, `gap` ticks apart. */
+  const play = (h: ReturnType<typeof ball>, shots: (readonly string[])[], gap: number) => {
+    let t = 10;
+    for (const sh of shots) {
+      sh.forEach((sw, i) => h.at(t + i).hit(sw));
+      t += gap;
+    }
+    h.run(t + 10);
+  };
+
+  it("builds from the second shot: Trail, Double, Triple, then Super for every further shot", () => {
+    const h = ball();
+    play(h, [W, L, E, W, L, E], 500);
+    expect(trails(h).map((t) => [t.name, t.length, t.points])).toEqual([
+      ["trail", 2, TRAIL_AWARD[2]], ["double", 3, TRAIL_AWARD[3]], ["triple", 4, TRAIL_AWARD[4]], ["super", 5, TRAIL_AWARD[5]], ["super", 6, TRAIL_AWARD[5]],
+    ]);
+  });
+
+  it("pays nothing for a lone shot, and the same shot twice does not lengthen the chain", () => {
+    const h = ball();
+    play(h, [W, W, W], 500);
+    expect(trails(h)).toEqual([]);
+    const g = ball();
+    play(g, [W, W, E], 500);
+    expect(trails(g).map((t) => t.length)).toEqual([2]);
+  });
+
+  it("starts over after the window: a shot later than TRAIL_WINDOW is a new chain", () => {
+    const h = ball();
+    play(h, [W, E], TRAIL_WINDOW + 500);
+    expect(trails(h)).toEqual([]);
+    const g = ball();
+    play(g, [W, E], TRAIL_WINDOW - 500);
+    expect(trails(g).map((t) => t.length)).toEqual([2]);
+  });
+
+  it("keeps the window open from each shot, not only from the first: a slow chain goes on", () => {
+    const h = ball();
+    play(h, [W, E, L, W], TRAIL_WINDOW - 500); // four shots, much longer in all than one window
+    expect(trails(h).map((t) => t.length)).toEqual([2, 3, 4]);
+  });
+
+  it("counts one scent for a trail of just two shots, and not another while it grows", () => {
+    const h = ball();
+    play(h, [W, E], 500);
+    expect(h.state.counters.scent).toBe(1);
+    const g = ball();
+    play(g, [W, E, L, W], 500);
+    expect(g.state.counters.scent).toBe(1);
+    const k = ball();
+    play(k, [W], 500);
+    expect(k.state.counters.scent ?? 0).toBe(0);
+  });
+
+  it("counts a scent for every trail made, and keeps it to the next ball while the chain starts over", () => {
+    const h = harness(colonyRules, { flow: { ...colonyFlow, saverTicks: 0 }, shots: colonyTable.shots });
+    h.at(1).button("start", true).at(2).ballAtPlunger().run(3);
+    play(h, [W, E, W], 500); // one trail, however long it grows
+    expect(h.state.counters.scent).toBe(1);
+    h.at(4000).drain().run(4001);
+    h.at(9000).ballAtPlunger().run(9001);
+    expect(h.state.counters.scent).toBe(1);
+    expect(h.state.counters.trailLen ?? 0).toBe(0);
+  });
+
+  it("ends the chain at the drain", () => {
+    const h = ball();
+    play(h, [W], 500);
+    h.at(1000).drain().run(1100);
+    expect(h.state.counters.trailLen ?? 0).toBe(0);
+    expect(h.state.timers.trail).toBeUndefined();
   });
 });
