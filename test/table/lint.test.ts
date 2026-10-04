@@ -202,11 +202,8 @@ describe("the layout lint", () => {
       ]);
     });
 
-    it("lints The Colony to these findings only: the drain gap is too wide (#25 to tune the flipper pair)", () => {
-      expect(lintTable(colonyTable)).toEqual([
-        "colony: flipper-gap: the flippers' resting tips are 4.06 balls apart, wanted 1.5 to 4",
-        "colony: flipper-gap: the flippers' raised tips are 4.06 balls apart, wanted 1 to 3",
-      ]);
+    it("lints The Colony clean", () => {
+      expect(lintTable(colonyTable)).toEqual([]);
     });
   });
 });
