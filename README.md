@@ -41,7 +41,7 @@ You get three balls. A ball the saver serves again does not cost a ball number. 
 
 **In the game today**
 
-- **Skill shot:** one of the three plunger-lane lanes lights at the start of each ball. Reach it before the ball touches anything else for 1,000,000. Running all three lanes in order is the **super skill shot**, 10,000,000.
+- **Skill shot:** one of the three plunger-lane lanes flashes at the start of each ball. The harder you pull the plunger, the higher the ball climbs; below the top it turns round and falls back. Stop the ball on the flashing lane, with the pull alone, for 1,000,000. The top lane is the **super skill shot**, 10,000,000: the ball has to turn round just short of leaving the lane. A full pull over the top pays nothing, and there is one try per ball.
 - **Ramps, orbits and loop:** a Leaf or Root Ramp shot pays 100,000; the orbits (past their spinner) pay 100,000 and the Pheromone Loop 150,000.
 - **Chambers:** Brood, Queen's, Mushroom and the Dig Site each pay when they catch the ball.
 - **Fungus Farm:** every target pays; the third of a bank pays the bank bonus of 250,000.
@@ -76,6 +76,7 @@ The game is deterministic: a fixed 1 ms physics step, a seeded random generator,
 
 Newest first. A short summary of what was added, no details.
 
+- **Skill shot needs skill:** the plunger pull decides which lane the ball turns round on; a slower plunger gives a wider window.
 - **Playfield art v4:** soil texture on the ramp strips, orbit corridors, target banks and lamp area.
 - **Flashing lamps:** a flash state in the rules; the open skill-shot lane blinks in the 3D view.
 - **Ball reflections:** the ball reflects warm soil instead of a blue-grey floor.

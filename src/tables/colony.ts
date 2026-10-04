@@ -113,7 +113,7 @@ export const colonyTable: TableDef = {
   },
   // the Pull Bridge: over the resting upper flipper, nearer the pivot than the tip so the Brood Chamber does not take the ball; the rules switch it on after a Leaf Ramp shot, so the ball waits there for the Dig Ramp shot
   magnets: [{ id: "pullBridge", at: [48, 612], r: 40, strength: 4 }],
-  plunger: { at: [499, 1030], dirDeg: -90, width: 32, stroke: 80, maxSpeed: 2, pullSpeed: 0.2, material: "plunger" },
+  plunger: { at: [499, 1030], dirDeg: -90, width: 32, stroke: 80, maxSpeed: 2, pullSpeed: 0.1, material: "plunger" },
   flippers: [
     { id: "left", pivot: [134, 900], length: 70, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -20, upMs: 40, downMs: 100, material: "rubber" },
     { id: "right", pivot: [354, 900], length: 70, rBase: 9.5, rTip: 5, restDeg: 150, activeDeg: 200, upMs: 40, downMs: 100, material: "rubber" },

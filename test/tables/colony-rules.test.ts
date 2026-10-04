@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { groups } from "../../src/app/hud";
 import { validateFlow } from "../../src/rules";
-import { advance, createGame, tick } from "../../src/sim/game";
+import { advance, createGame, takeCommands, tick } from "../../src/sim/game";
 import { allTables, tableSetups } from "../../src/tables";
 import { colonyTable } from "../../src/tables/colony";
 import { TRAIL_AWARD, TRAIL_WINDOW, CHAMBER_HOLD, CHAMBER_POINTS, FUNGUS_BANK, FUNGUS_RESET, KICK_ONLY, MAX_SCORE, RAMP_SHOT, REPLAY_SCORE, SKILL_SHOT, SUPER_SKILL_SHOT, SWITCH_POINTS } from "../../src/tables/colony-scoring";
@@ -90,41 +90,58 @@ describe("the skill shot", () => {
     expect(h.cmds).toContainEqual({ c: "setLamp", lamp: l, state: "off" });
   });
 
-  it("awards a million for reaching the lit lane first, once, and tells the display", () => {
-    const h = ball();
-    const l = lit(h)[0]!;
-    h.at(10).hit(l).at(20).hit(l).run(30);
-    expect(score(h)).toBe(SKILL_SHOT);
-    expect(h.state.lamps[l]).toBe("collected");
-    expect(h.cmds.filter((c) => c.c === "dmd" && c.show.id === "skillShot")).toEqual([{ c: "dmd", show: { id: "skillShot", args: { points: SKILL_SHOT } } }]);
-  });
+  const LANES = ["skill1", "skill2", "skill3"] as const;
+  /** The ball rises to lane `top` (touching every lane up to it, in order) and falls back, touching the lanes again on the way down. */
+  const rise = (h: ReturnType<typeof ball>, top: number, from = 10) => {
+    for (let i = 0; i < top; i++) h.at(from + i * 10).hit(LANES[i]!);
+    h.at(from + top * 10).hit(LANES[top - 1]!).run(from + top * 10 + 5);
+  };
+  const litIndex = (h: ReturnType<typeof ball>) => LANES.indexOf(lit(h)[0] as (typeof LANES)[number]) + 1;
+  const skillCmds = (h: ReturnType<typeof ball>) => h.cmds.filter((c) => c.c === "dmd" && (c.show.id === "skillShot" || c.show.id === "superSkillShot"));
 
-  it("awards nothing for a lane that is not lit, and still pays the lit lane after it", () => {
-    const h = ball();
-    const l = lit(h)[0]!;
-    const other = ["skill1", "skill2", "skill3"].find((x) => x !== l)!;
-    h.at(10).hit(other).run(11);
-    expect(score(h)).toBe(0);
-    h.at(20).hit(l).run(21);
-    expect(score(h)).toBe(SKILL_SHOT);
-  });
-
-  it("makes the whole lane, skill1 to skill3 in order, a super skill shot on top of the skill shot", () => {
+  it("awards a million for a ball that turns round on the lit lane, once, and tells the display; the top lane is the super skill shot of ten million", () => {
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
       const h = ball(seed);
-      h.at(10).hit("skill1").at(20).hit("skill2").at(30).hit("skill3").run(40);
-      expect(score(h), `seed ${seed}`).toBe(SKILL_SHOT + SUPER_SKILL_SHOT);
-      expect(h.cmds.some((c) => c.c === "dmd" && c.show.id === "superSkillShot")).toBe(true);
+      const k = litIndex(h);
+      rise(h, k);
+      const points = k === 3 ? SUPER_SKILL_SHOT : SKILL_SHOT;
+      expect(score(h), `seed ${seed} lane ${k}`).toBe(points);
+      expect(h.state.lamps[LANES[k - 1]!]).toBe("collected");
+      expect(skillCmds(h)).toEqual([{ c: "dmd", show: { id: k === 3 ? "superSkillShot" : "skillShot", args: { points } } }]);
     }
   });
 
-  it("does not make a super skill shot of the lane run backwards, or twice", () => {
+  it("needs the skill: a ball that turns round below the lit lane, or above it, pays nothing, and the try is over", () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      for (const top of [1, 2, 3]) {
+        const h = ball(seed);
+        const k = litIndex(h);
+        if (top === k) continue;
+        rise(h, top);
+        expect(score(h), `seed ${seed} lit ${k} apex ${top}`).toBe(0);
+        expect(lit(h)).toEqual([]);
+        rise(h, k, 100); // no second try
+        expect(score(h)).toBe(0);
+      }
+    }
+  });
+
+  it("pays nothing for a full run over the top, whatever lane is lit: the plunger pulled all the way is no skill", () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const h = ball(seed);
+      h.at(10).hit("skill1").at(20).hit("skill2").at(30).hit("skill3").at(40).hit("loopR", 0, "trigger").at(50).hit(LANES[0]!).at(60).hit(LANES[2]!).run(70);
+      expect(score(h), `seed ${seed}`).toBeLessThan(SKILL_SHOT);
+      expect(skillCmds(h)).toEqual([]);
+    }
+  });
+
+  it("does not take the first touch of a lane as the turn: rising lane by lane is not yet the skill shot", () => {
     const h = ball();
-    h.at(10).hit("skill3").at(20).hit("skill2").at(30).hit("skill1").run(40);
-    expect(score(h)).toBeLessThanOrEqual(SKILL_SHOT);
-    const g = ball();
-    g.at(10).hit("skill1").at(20).hit("skill2").at(30).hit("skill3").at(40).hit("skill1").at(50).hit("skill2").at(60).hit("skill3").run(70);
-    expect(score(g)).toBe(SKILL_SHOT + SUPER_SKILL_SHOT);
+    const k = litIndex(h);
+    for (let i = 0; i < k; i++) h.at(10 + i * 10).hit(LANES[i]!);
+    h.run(60);
+    expect(score(h)).toBe(0);
+    expect(h.state.lamps[LANES[k - 1]!]).toBe("flash"); // still open, the ball has not turned yet
   });
 
   it("closes when the ball touches anything else on the table: the lamps go off and no skill shot follows", () => {
@@ -350,30 +367,40 @@ describe("scoring on the physical table", () => {
 });
 
 describe("the skill shot on the physical table", () => {
-  function launch(ms: number) {
-    const g = createGame(colonyTable, { ...tableSetups.colony!, seed: 3 });
+  /** Starts a game on `seed`, pulls the plunger for 50 + `ms` ticks, lets go and plays 3 s; says which lane was lit and what the skill shot paid. */
+  function launch(ms: number, seed = 3) {
+    const g = createGame(colonyTable, { ...tableSetups.colony!, seed });
     g.input.start = true;
     advance(g, 5);
     g.input.start = false;
     advance(g, 5);
+    const lane = ["skill1", "skill2", "skill3"].findIndex((l) => g.rules.state.lamps[l] === "flash") + 1;
     g.input.plunge = true;
     advance(g, 50);
     for (let i = 0; i < ms; i++) tick(g);
     g.input.plunge = false;
     for (let i = 0; i < 3000; i++) tick(g);
-    return g.rules.state.player.score;
+    const shown = takeCommands(g).flatMap((c) => (c.c === "dmd" && (c.show.id === "skillShot" || c.show.id === "superSkillShot") ? [c.show.id] : []));
+    return { lane, shown };
   }
 
-  it("pays the skill shot and the super skill shot for a full pull of the plunger", () => {
-    expect(launch(600)).toBeGreaterThanOrEqual(SKILL_SHOT + SUPER_SKILL_SHOT);
+  it("pays the skill shot for the right pull and not for the others: the pull decides the lane the ball turns round on, and the top lane is the super skill shot", () => {
+    const paid = new Set<string>();
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+      for (const [ms, lane] of [[275, 1], [335, 2], [380, 3]] as const) {
+        const r = launch(ms, seed);
+        expect(r.shown, `seed ${seed} pull ${ms}`).toEqual(r.lane === lane ? [lane === 3 ? "superSkillShot" : "skillShot"] : []);
+        r.shown.forEach((id) => paid.add(`${lane}:${id}`));
+      }
+    }
+    expect([...paid].sort()).toEqual(["1:skillShot", "2:skillShot", "3:superSkillShot"]); // every lane was lit by some seed and paid
   });
 
-  it("pays no super skill shot for a short pull, which does not run the whole lane", () => {
-    const s = launch(120);
-    expect(s).toBeLessThan(SUPER_SKILL_SHOT);
+  it("pays nothing for a full pull of the plunger", () => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) expect(launch(600, seed).shown, `seed ${seed}`).toEqual([]);
   });
 
-  it("runs more of the skill lane the longer the pull: none, the first lane, then all three (the pull table is pinned so a plunger tuning cannot make the super trivial or impossible unnoticed)", () => {
+  it("runs more of the skill lane the longer the pull: none, the first lane, then all three (the pull table is pinned so a plunger tuning cannot make the skill shot trivial or impossible unnoticed)", () => {
     const lanes = (ms: number): string[] => {
       const seen: string[] = [];
       const rules = { ...colonyRules, onSwitch: (c: Parameters<NonNullable<typeof colonyRules.onSwitch>>[0], e: Parameters<NonNullable<typeof colonyRules.onSwitch>>[1]) => { if (e.sw.startsWith("skill")) seen.push(e.sw); colonyRules.onSwitch!(c, e); } };
@@ -389,10 +416,11 @@ describe("the skill shot on the physical table", () => {
       for (let i = 0; i < 3000; i++) tick(g);
       return seen;
     };
-    expect(lanes(60)).toEqual([]);
-    expect(lanes(110)[0]).toBe("skill1");
-    expect(lanes(110)).not.toContain("skill3");
-    expect(lanes(300).slice(0, 3)).toEqual(["skill1", "skill2", "skill3"]);
+    expect(lanes(150)).toEqual([]);
+    expect(lanes(275)).toEqual(["skill1", "skill1"]);
+    expect(lanes(335)).toEqual(["skill1", "skill2", "skill2", "skill1"]);
+    expect(lanes(380)).toEqual(["skill1", "skill2", "skill3", "skill3", "skill2", "skill1"]);
+    expect(lanes(600)).toEqual(["skill1", "skill2", "skill3"]); // over the top
   });
 });
 

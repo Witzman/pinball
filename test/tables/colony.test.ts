@@ -78,8 +78,8 @@ describe("The Colony, step 1: the outline", () => {
     return { seen, drained: g.drains > 0, outside, top, reentered };
   }
 
-  it("launches from the plunger: pulls from 300 ms up send the ball round the dome, inside the table, never back into the lane, and it drains", () => {
-    for (const ms of [300, 600, 1000]) {
+  it("launches from the plunger: pulls from 450 ms up send the ball round the dome, inside the table, never back into the lane, and it drains", () => {
+    for (const ms of [450, 600, 1000]) {
       const r = launch(ms);
       expect(r.drained, `pull ${ms} ms`).toBe(true);
       expect(r.outside, `pull ${ms} ms: ticks outside the table`).toBe(0);
