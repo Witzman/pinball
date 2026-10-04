@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { advance, createGame, nudge, tick } from "../../src/sim/game";
 import { runReplay, validateReplay } from "../../src/sim/replay";
 import type { Replay } from "../../src/sim/replay";
+import { snapshot } from "../../src/sim/snapshot";
 import { demoTable } from "../../src/tables/demo";
 
 function steady() {
@@ -136,5 +137,16 @@ describe("nudges in a replay", () => {
   it("drops a nudge inside the cooldown: two close together play as the first alone", () => {
     expect(play(withNudges([1000, "nudge_left"], [1100, "nudge_left"]))).toBe(play(withNudges([1000, "nudge_left"])));
     expect(play(withNudges([1000, "nudge_left"], [1300, "nudge_left"]))).not.toBe(play(withNudges([1000, "nudge_left"])));
+  });
+
+  it("tells the view about a felt nudge: which way, and how long ago (for the shake)", () => {
+    const { g } = steady();
+    expect(snapshot(g).nudge).toBeNull();
+    nudge(g, "right");
+    expect(snapshot(g).nudge).toBeNull(); // asked, not yet felt
+    tick(g);
+    expect(snapshot(g).nudge).toEqual({ dir: "right", ago: 1 });
+    advance(g, 40);
+    expect(snapshot(g).nudge).toEqual({ dir: "right", ago: 41 });
   });
 });
