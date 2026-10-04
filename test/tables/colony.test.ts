@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { advance, createGame, tick } from "../../src/sim/game";
+import { harness } from "../rules/harness";
 import type { Game } from "../../src/sim/game";
 import type { TableRules } from "../../src/rules";
-import { colonyRules } from "../../src/tables/colony-rules";
-import { CHAMBER_HOLD, FUNGUS_BANK, FUNGUS_RESET, KICKBACK_SPEED } from "../../src/tables/colony-scoring";
+import { colonyFlow, colonyRules } from "../../src/tables/colony-rules";
+import { CHAMBER_HOLD, FUNGUS_BANK, FUNGUS_RESET, KICKBACK_SPEED, LOOP_SHOT, SWITCH_POINTS, TRAIL_SHOT } from "../../src/tables/colony-scoring";
 import { allTables, tableSetups } from "../../src/tables";
 import { colonyTable } from "../../src/tables/colony";
 import { validateTable } from "../../src/table/validate";
@@ -37,17 +38,17 @@ describe("The Colony, step 1: the outline", () => {
     expect(tableSetups.colony?.flow).toBeDefined();
   });
 
-  it("is the table of the spec: 520 x 1050 mm, 6.5 degrees, a 27 mm ball, a 70 mm flipper pair and the upper flipper, one plunger", () => {
+  it("is the table of the spec: 520 x 1050 mm, 6.5 degrees, a 27 mm ball, a 70 mm flipper pair and the two upper flippers, one plunger", () => {
     expect(colonyTable.playfield).toEqual({ width: 520, length: 1050, slopeDeg: 6.5 });
     expect(colonyTable.ball.radius * 2).toBe(27);
-    expect(colonyTable.flippers.map((f) => [f.id, f.length, f.input ?? null])).toEqual([["left", 70, null], ["right", 70, null], ["upperLeft", 58, "left"]]);
+    expect(colonyTable.flippers.map((f) => [f.id, f.length, f.input ?? null])).toEqual([["left", 70, null], ["right", 70, null], ["upperLeft", 58, "left"], ["upperRight", 45, "right"]]);
     expect(colonyTable.plunger).toBeDefined();
   });
 
   it("has a skill shot of three lane switches up the plunger lane, and the frozen switch names", () => {
-    expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"], digRamp: ["digEnter", "digSite"] });
+    expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"], digRamp: ["digEnter", "digSite"], trailWest: ["orbitWIn", "spinW"], trailEast: ["orbitEIn", "spinE"], pheromoneLoop: ["loopL", "loopR"] });
     const names = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : [])), ...(colonyTable.gates ?? []).flatMap((g) => (g.switch ? [g.switch] : []))].sort();
-    expect(names).toEqual(["brood", "bumper1", "bumper2", "bumper3", "digEnter", "digSite", "fungusL1", "fungusL2", "fungusL3", "fungusR1", "fungusR2", "fungusR3", "inL", "inR", "kickbackL", "leafEnter", "leafExit", "mushroom", "outL", "outR", "queen", "rollO", "rollR", "rollW", "rootEnter", "rootExit", "scout", "skill1", "skill2", "skill3", "slingL", "slingR"]);
+    expect(names).toEqual(["brood", "bumper1", "bumper2", "bumper3", "digEnter", "digSite", "fungusL1", "fungusL2", "fungusL3", "fungusR1", "fungusR2", "fungusR3", "inL", "inR", "kickbackL", "leafEnter", "leafExit", "loopL", "loopR", "mushroom", "orbitEIn", "orbitEOut", "orbitWIn", "orbitWOut", "outL", "outR", "queen", "rollO", "rollR", "rollW", "rootEnter", "rootExit", "scout", "skill1", "skill2", "skill3", "slingL", "slingR", "spinE", "spinW"]);
   });
 
   it("lets no ball rest for ever: balls dropped at rest over a grid all drain", () => {
@@ -495,10 +496,10 @@ describe("The Colony, step 3c: the Dig Ramp, the Dig Site and the Pull Bridge", 
     }
   });
 
-  it("can be reached by a flipper: some timing of the left or right flipper, or a ball up the Root Ramp, puts a ball in the Dig Site", () => {
+  it("can be reached by a flipper: some timing of the left flipper or of the upper right flipper puts a ball in the Dig Site", () => {
     const sweep = (start: [number, number], button: "left" | "right") => {
       let hit = 0;
-      for (let press = 200; press <= 1300; press += 25) {
+      for (let press = 200; press <= 1300; press += 10) {
         const { g, seen } = play();
         drop(g, start[0], start[1]);
         for (let i = 0; i < 4000 && g.table.world.balls.length > 0; i++) {
@@ -509,7 +510,7 @@ describe("The Colony, step 3c: the Dig Ramp, the Dig Site and the Pull Bridge", 
       }
       return hit;
     };
-    const best = Math.max(sweep([85, 760], "left"), sweep([403, 760], "right"), sweep([25, 480], "left"));
+    const best = Math.max(sweep([85, 760], "left"), sweep([440, 540], "right"));
     expect(best).toBeGreaterThan(0);
   }, 120000);
 
@@ -670,4 +671,120 @@ describe("The Colony, step 4: the Fungus Farm and the kickback", () => {
     expect(caught).toBeLessThanOrEqual(3);
     expect(g.drains).toBe(1);
   });
+});
+
+describe("The Colony, step 2b: the orbits, the spinners and the Pheromone Loop", () => {
+  const trig = (id: string) => colonyTable.triggers!.find((t) => t.id === id)!;
+
+  it("pins the orbit and loop triggers (placeholders: change them on purpose), all plain rollovers in zone 0", () => {
+    expect(["orbitWIn", "spinW", "orbitWOut", "orbitEIn", "spinE", "orbitEOut", "loopL", "loopR"].map((id) => [id, trig(id).at, trig(id).r, trig(id).hold, trig(id).zones])).toEqual([
+      ["orbitWIn", [33, 545], 14, undefined, undefined],
+      ["spinW", [33, 420], 14, undefined, undefined],
+      ["orbitWOut", [33, 235], 14, undefined, undefined],
+      ["orbitEIn", [455, 500], 14, undefined, undefined],
+      ["spinE", [455, 400], 14, undefined, undefined],
+      ["orbitEOut", [455, 290], 14, undefined, undefined],
+      ["loopL", [82, 100], 12, undefined, undefined],
+      ["loopR", [438, 100], 12, undefined, undefined],
+    ]);
+  });
+
+  it("has the East corridor free of the Dig Ramp's mouth: the East triggers lie right of the mouth gate (x 392 to 452) and clear of the plunger lane wall", () => {
+    for (const id of ["orbitEIn", "spinE", "orbitEOut"]) {
+      const t = trig(id);
+      expect(t.at[0] - t.r, id).toBeGreaterThanOrEqual(441); // a ball hugging the wall (centre x 469.5) and one 15 mm left of it both count
+      expect(t.at[0] + t.r, id).toBeLessThanOrEqual(483);
+    }
+    for (const id of ["orbitWIn", "spinW", "orbitWOut"]) expect(trig(id).at[0] - trig(id).r, id).toBeGreaterThanOrEqual(5);
+  });
+
+  it("has the upper right flipper as the mirror of the upper left one about x = 244: same shape, mirrored angles, the right button, and clear of the Root Ramp lane", () => {
+    const [ul, ur] = ["upperLeft", "upperRight"].map((id) => colonyTable.flippers.find((f) => f.id === id)!);
+    expect(ur!.input).toBe("right");
+    expect([ur!.restDeg, ur!.activeDeg]).toEqual([150, 210]); // 180 - 30 and 180 + 30: the mirror of 30 and -30
+    expect(ur!.pivot[0]).toBe(488 - ul!.pivot[0]);
+    expect(ur!.pivot[0] + ur!.rBase).toBeLessThan(483); // inside the plunger lane wall
+  });
+
+  it("swings the upper right flipper with the right button only", () => {
+    const { g } = play();
+    const u = () => g.table.world.flippers[g.table.flipperIds.indexOf("upperRight")]!.u;
+    g.input.left = true;
+    for (let i = 0; i < 100; i++) tick(g);
+    expect(u()).toBe(0);
+    g.input.left = false;
+    g.input.right = true;
+    for (let i = 0; i < 100; i++) tick(g);
+    expect(u()).toBe(1);
+  });
+
+  it("hears a trail when a ball goes up an orbit past its spinner, in that order, and the shot is paid", () => {
+    for (const [shot, path] of [["trailWest", [[33, 560], [33, 400]]], ["trailEast", [[455, 548], [455, 380]]]] as const) {
+      const shots: string[] = [];
+      const seen: string[] = [];
+      const rules: TableRules = { ...colonyRules, onSwitch: (c, e) => { seen.push(e.sw); colonyRules.onSwitch?.(c, e); }, onShot: (c, s, e) => { shots.push(s); colonyRules.onShot?.(c, s, e); } };
+      const g = createGame(colonyTable, { rules });
+      g.table.world.gravity = 0;
+      Object.assign(g.table.world.balls[0]!, { x: path[0]![0]! / 1000, y: path[0]![1]! / 1000, vx: 0, vy: -1.5, zone: 0 });
+      for (let i = 0; i < 300; i++) tick(g);
+      expect(shots, shot).toContain(shot);
+      expect(seen.filter((x) => /^(orbit|spin)/.test(x)).slice(0, 2), shot).toEqual(shot === "trailWest" ? ["orbitWIn", "spinW"] : ["orbitEIn", "spinE"]);
+    }
+  });
+
+  it("does not hear a trail when a ball comes down an orbit (spinner first, then the entrance)", () => {
+    for (const [shot, x] of [["trailWest", 33], ["trailEast", 455]] as const) {
+      const shots: string[] = [];
+      const rules: TableRules = { ...colonyRules, onShot: (c, s, e) => { shots.push(s); colonyRules.onShot?.(c, s, e); } };
+      const g = createGame(colonyTable, { rules });
+      g.table.world.gravity = 0;
+      Object.assign(g.table.world.balls[0]!, { x: x / 1000, y: 0.4, vx: 0, vy: 1.5, zone: 0 });
+      for (let i = 0; i < 300; i++) tick(g);
+      expect(shots, shot).not.toContain(shot);
+    }
+  });
+
+  it("hears the Pheromone Loop for loopL then loopR, and not for loopR then loopL (the way a plunger ball goes round the dome)", () => {
+    const forward = harness(colonyRules, { flow: colonyFlow, shots: colonyTable.shots, seed: 1 });
+    forward.at(1).button("start", true).at(2).ballAtPlunger().run(3);
+    forward.take();
+    const before = forward.state.player.score;
+    forward.at(10).hit("loopL").at(30).hit("loopR").run(31);
+    expect(forward.state.player.score - before).toBe(LOOP_SHOT);
+    const back = harness(colonyRules, { flow: colonyFlow, shots: colonyTable.shots, seed: 1 });
+    back.at(1).button("start", true).at(2).ballAtPlunger().run(3);
+    back.take();
+    const b0 = back.state.player.score;
+    back.at(10).hit("loopR").at(30).hit("loopL").run(31);
+    expect(back.state.player.score - b0).toBe(0);
+  });
+
+  it("pays a trail 100,000 and the loop 150,000, and each spin 5,000", () => {
+    expect([TRAIL_SHOT, LOOP_SHOT, SWITCH_POINTS.spinW, SWITCH_POINTS.spinE]).toEqual([100_000, 150_000, 5_000, 5_000]);
+  });
+
+  it("can be reached by a flipper: the upper left flipper sends a ball up Trail West and round the Pheromone Loop, the upper right flipper up Trail East", () => {
+    const sweep = (start: [number, number], button: "left" | "right", want: string) => {
+      let hit = 0;
+      for (let press = 200; press <= 1300; press += 10) {
+        const shots: string[] = [];
+        const rules: TableRules = { ...colonyRules, onShot: (c, s, e) => { shots.push(s); colonyRules.onShot?.(c, s, e); } };
+        const g = createGame(colonyTable, { rules });
+        drop(g, start[0], start[1]);
+        for (let i = 0; i < 4000 && g.table.world.balls.length > 0; i++) {
+          g.input[button] = i >= press && i < press + 100;
+          tick(g);
+        }
+        if (shots.includes(want)) hit++;
+      }
+      return hit;
+    };
+    expect(sweep([25, 480], "left", "trailWest"), "upper left -> Trail West").toBeGreaterThan(0);
+    expect(sweep([25, 480], "left", "pheromoneLoop"), "upper left -> Pheromone Loop").toBeGreaterThan(0);
+    expect(sweep([463, 450], "right", "trailEast"), "upper right -> Trail East").toBeGreaterThan(0);
+  }, 240000);
+
+  it("lets no ball rest for ever around the new flipper and the orbit corridors", () => {
+    expect(restGrid(colonyTable, { x: [400, 480, 10], y: [250, 700, 25], create: (def) => createGame(def, { rules: colonyRules }) })).toEqual([]);
+  }, 120000);
 });
