@@ -45,9 +45,9 @@ describe("The Colony, step 1: the outline", () => {
   });
 
   it("has a skill shot of three lane switches up the plunger lane, and the frozen switch names", () => {
-    expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"] });
+    expect(colonyTable.shots).toEqual({ skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"], digRamp: ["digEnter", "digSite"] });
     const names = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : [])), ...(colonyTable.gates ?? []).flatMap((g) => (g.switch ? [g.switch] : []))].sort();
-    expect(names).toEqual(["brood", "bumper1", "bumper2", "bumper3", "inL", "inR", "kickbackL", "leafEnter", "leafExit", "mushroom", "outL", "outR", "queen", "rollO", "rollR", "rollW", "rootEnter", "rootExit", "scout", "skill1", "skill2", "skill3", "slingL", "slingR"]);
+    expect(names).toEqual(["brood", "bumper1", "bumper2", "bumper3", "digEnter", "digSite", "inL", "inR", "kickbackL", "leafEnter", "leafExit", "mushroom", "outL", "outR", "queen", "rollO", "rollR", "rollW", "rootEnter", "rootExit", "scout", "skill1", "skill2", "skill3", "slingL", "slingR"]);
   });
 
   it("lets no ball rest for ever: balls dropped at rest over a grid all drain", () => {
@@ -278,9 +278,9 @@ describe("The Colony, step 1: the outline", () => {
   });
 
   it("has two rising ramps, each with a mouth and an exit gate, rails in its own zone, and a height profile that climbs", () => {
-    const ramps = colonyTable.visual!.ramps!;
+    const ramps = colonyTable.visual!.ramps!.filter((r) => r.zone < 3); // the Dig Ramp ends in the Dig Site, not an exit gate: its own tests below
     expect(ramps.map((r) => r.zone)).toEqual([1, 2]);
-    expect(colonyTable.visual!.heights).toEqual([0, 48, 48]);
+    expect(colonyTable.visual!.heights).toEqual([0, 48, 48, 56]);
     for (const r of ramps) {
       expect(r.heights, `zone ${r.zone}`).toEqual([0, 48]);
       const rails = colonyTable.walls.filter((w) => w.zones?.length === 1 && w.zones[0] === r.zone);
@@ -291,7 +291,7 @@ describe("The Colony, step 1: the outline", () => {
   });
 
   it("builds each ramp where its picture is: rails at the edges of the drawn path, the gates between them, the mouth at the start of the path and the exit at its end", () => {
-    for (const r of colonyTable.visual!.ramps!) {
+    for (const r of colonyTable.visual!.ramps!.filter((r) => r.zone < 3)) {
       const cx = r.path[0]![0];
       const [y0, y1] = [r.path[0]![1], r.path[1]![1]];
       const rails = colonyTable.walls.filter((w) => w.zones?.length === 1 && w.zones[0] === r.zone);
@@ -343,9 +343,9 @@ describe("The Colony, step 1: the outline", () => {
         tick(g);
         zones.add(b.zone);
       }
-      expect(seen, name).toEqual([enter, exit]);
+      expect(seen.slice(0, 2), name).toEqual([enter, exit]); // a ball out of the Root exit may roll on up into the Dig Ramp (that is meant)
       expect(zones.has(zone), name).toBe(true);
-      expect(shots, name).toEqual([name]);
+      expect(shots[0], name).toBe(name);
     }
   });
 
@@ -387,6 +387,7 @@ describe("The Colony, step 3b: the chambers", () => {
       ["brood", [85, 665], 12, { kickDeg: -25, kickSpeed: 1.8 }],
       ["queen", [260, 470], 12, { kickDeg: -110, kickSpeed: 1.6 }],
       ["mushroom", [244, 555], 12, { kickDeg: 100, kickSpeed: 1.2 }],
+      ["digSite", [422, 215], 12, { kickDeg: 90, kickSpeed: 0.8 }],
     ]);
   });
 
@@ -441,4 +442,105 @@ describe("The Colony, step 3b: the chambers", () => {
       expect(best, id).toBeGreaterThan(0);
     }
   }, 240000);
+});
+
+describe("The Colony, step 3c: the Dig Ramp, the Dig Site and the Pull Bridge", () => {
+  it("pins the Dig Ramp's placement (placeholders: change them on purpose): zone 3, mouth at y 330, the Dig Site at the top, a steeper climb than the other ramps", () => {
+    const r = colonyTable.visual!.ramps!.find((x) => x.zone === 3)!;
+    expect([r.path, r.width, r.heights]).toEqual([[[422, 330], [422, 190]], 60, [0, 56]]);
+    const rails = colonyTable.walls.filter((w) => w.zones?.length === 1 && w.zones[0] === 3);
+    expect(rails.map((w) => (w.type === "segment" ? [w.a, w.b] : null))).toEqual([[[392, 330], [392, 190]], [[452, 330], [452, 190]], [[392, 190], [452, 190]]]);
+    expect(colonyTable.gates!.filter((g) => g.zoneB === 3 || g.zoneA === 3).map((g) => [g.a, g.b, g.zoneA, g.zoneB, g.switch])).toEqual([[[392, 330], [452, 330], 0, 3, "digEnter"]]);
+    const site = colonyTable.triggers!.find((t) => t.id === "digSite")!;
+    expect(site.zones).toEqual([3]);
+    expect(site.at[0]).toBe(422);
+    expect(site.at[1]).toBeGreaterThan(190 + 13.5); // the ball fits between the cap and the hole
+    expect(colonyTable.magnets).toEqual([{ id: "pullBridge", at: [48, 612], r: 40, strength: 4 }]);
+  });
+
+  it("lets a ball roll up the Dig Ramp into the Dig Site: the rules hear digEnter and digSite, the shot is digRamp, the ball is held in zone 3", () => {
+    const shots: string[] = [];
+    const seen: string[] = [];
+    const rules: TableRules = { ...colonyRules, onSwitch: (c, e) => { seen.push(e.sw); colonyRules.onSwitch?.(c, e); }, onShot: (c, s) => { shots.push(s); colonyRules.onShot?.(c, s); } };
+    const g = createGame(colonyTable, { rules });
+    Object.assign(g.table.world.balls[0]!, { x: 0.422, y: 0.4, vx: 0, vy: -1.6, zone: 0 });
+    for (let i = 0; i < 600; i++) tick(g);
+    expect(seen.slice(0, 2)).toEqual(["digEnter", "digSite"]);
+    expect(shots).toContain("digRamp");
+    const b = g.table.world.balls[0]!;
+    expect(b.zone).toBe(3);
+    expect(b.hold).toBeGreaterThan(0);
+  });
+
+  it("lets the ball out of the Dig Site: it rolls down the ramp, out of the mouth, and drains in the end, caught once", () => {
+    const { g, seen } = play();
+    Object.assign(g.table.world.balls[0]!, { x: 0.422, y: 0.4, vx: 0, vy: -1.6, zone: 0 });
+    expect(drains(g, 40000)).toBe(true);
+    expect(seen.filter((s) => s === "digSite")).toHaveLength(1);
+  });
+
+  it("keeps a ball on the table when it slips into the Dig Ramp zone outside its rails", () => {
+    for (const [x, y, vx, vy] of [[388, 335, 0.4, -0.5], [456, 328, -0.2, -0.6], [470, 250, 0.9, -0.2], [380, 300, -0.9, -0.4]] as const) {
+      const g = createGame(colonyTable);
+      Object.assign(g.table.world.balls[0]!, { x: x / 1000, y: y / 1000, vx, vy, zone: 3 });
+      for (let i = 0; i < 6000; i++) {
+        tick(g);
+        const ball = g.table.world.balls[0];
+        if (!ball) break;
+        expect(ball.x, `(${x},${y}) tick ${i}`).toBeGreaterThan(0);
+        expect(ball.x, `(${x},${y}) tick ${i}`).toBeLessThan(0.52);
+        expect(ball.y, `(${x},${y}) tick ${i}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("can be reached by a flipper: some timing of the left or right flipper, or a ball up the Root Ramp, puts a ball in the Dig Site", () => {
+    const sweep = (start: [number, number], button: "left" | "right") => {
+      let hit = 0;
+      for (let press = 200; press <= 1300; press += 25) {
+        const { g, seen } = play();
+        drop(g, start[0], start[1]);
+        for (let i = 0; i < 4000 && g.table.world.balls.length > 0; i++) {
+          g.input[button] = i >= press && i < press + 100;
+          tick(g);
+        }
+        if (seen.includes("digSite")) hit++;
+      }
+      return hit;
+    };
+    const best = Math.max(sweep([85, 760], "left"), sweep([403, 760], "right"), sweep([25, 480], "left"));
+    expect(best).toBeGreaterThan(0);
+  }, 120000);
+
+  it("switches the Pull Bridge on after a Leaf Ramp shot, holds a ball on the upper flipper with it, and switches it off after the hold time and at a drain", () => {
+    // the rules turn it on
+    const r = { on: false };
+    const rules: TableRules = { ...colonyRules };
+    const g = createGame(colonyTable, { rules });
+    g.table.world.gravity = 0;
+    Object.assign(g.table.world.balls[0]!, { x: 0.07, y: 0.56, vx: 0, vy: -1.6, zone: 0 });
+    let onAt = -1;
+    for (let i = 0; i < 700; i++) {
+      tick(g);
+      if (g.table.world.magnets[0]!.on && onAt < 0) onAt = i;
+    }
+    r.on = g.table.world.magnets[0]!.on;
+    expect(onAt, "on after the Leaf shot").toBeGreaterThan(0);
+    expect(r.on).toBe(true);
+    for (let i = 0; i < 1500; i++) tick(g);
+    expect(g.table.world.magnets[0]!.on, "off after the hold time").toBe(false);
+  });
+
+  it("holds the ball at the upper flipper with the magnet on, and lets it go with it off", () => {
+    const stays = (on: boolean) => {
+      const g = createGame(colonyTable);
+      drop(g, 60, 600);
+      g.table.world.magnets[0]!.on = on;
+      for (let i = 0; i < 1500; i++) tick(g);
+      const b = g.table.world.balls[0];
+      return !!b && Math.hypot(b.x * 1000 - 48, b.y * 1000 - 612) < 40;
+    };
+    expect(stays(true)).toBe(true);
+    expect(stays(false)).toBe(false);
+  });
 });

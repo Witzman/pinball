@@ -21,11 +21,11 @@ export const colonyTable: TableDef = {
   },
   walls: [
     // the left wall, the dome over the top and the right wall; open at the bottom, between the lanes: that is the drain
-    { type: "polyline", points: [[5, 1045], [5, 260]], material: "metal", zones: [0, 1, 2] },
-    { type: "arc", c: [260, 260], r: 255, from: 180, to: 360, chords: 32, material: "metal", zones: [0, 1, 2] },
-    { type: "polyline", points: [[515, 260], [515, 1045]], material: "metal", zones: [0, 1, 2] },
+    { type: "polyline", points: [[5, 1045], [5, 260]], material: "metal", zones: [0, 1, 2, 3] },
+    { type: "arc", c: [260, 260], r: 255, from: 180, to: 360, chords: 32, material: "metal", zones: [0, 1, 2, 3] },
+    { type: "polyline", points: [[515, 260], [515, 1045]], material: "metal", zones: [0, 1, 2, 3] },
     // the plunger lane: its wall and its floor (the pulled plunger and its ball stop on it), and a one-way flap at the top
-    { type: "segment", a: [483, 1045], b: [483, 250], material: "metal", zones: [0, 1, 2] },
+    { type: "segment", a: [483, 1045], b: [483, 250], material: "metal", zones: [0, 1, 2, 3] },
     { type: "segment", a: [483, 1045], b: [515, 1045], material: "metal" },
     { type: "segment", a: [515, 205], b: [483, 250], material: "metal", oneWay: true },
     // (the outer walls above exist in the ramp zones too: a ball that slips into a ramp zone outside its rails, at the edge of a mouth, stays on the table)
@@ -44,6 +44,10 @@ export const colonyTable: TableDef = {
     // the Root Ramp (right, zone 2): the same on the right, from y=640 up to y=400
     { type: "segment", a: [380, 640], b: [380, 400], material: "metal", zones: [2] },
     { type: "segment", a: [440, 640], b: [440, 400], material: "metal", zones: [2] },
+    // the Dig Ramp (upper right, zone 3): rails 60 mm apart from y=330 up to y=190, closed at the top by the Dig Site (a cap, so a ball cannot leave over the top)
+    { type: "segment", a: [392, 330], b: [392, 190], material: "metal", zones: [3] },
+    { type: "segment", a: [452, 330], b: [452, 190], material: "metal", zones: [3] },
+    { type: "segment", a: [392, 190], b: [452, 190], material: "metal", zones: [3] },
   ],
   posts: [
     // the Aphid Pasture: three pop bumpers in a triangle, 60 mm or more between their edges (no pocket for a ball to bounce in for ever)
@@ -68,6 +72,8 @@ export const colonyTable: TableDef = {
     { id: "queen", at: [260, 470], r: 12, switch: "queen", hold: { kickDeg: -110, kickSpeed: 1.6 } },
     // Mushroom Hole, between the two banks of the Fungus Farm (step 4); kicks down towards the flippers
     { id: "mushroom", at: [244, 555], r: 12, switch: "mushroom", hold: { kickDeg: 100, kickSpeed: 1.2 } },
+    // the Dig Site (step 3c), at the top of the Dig Ramp: a ball sits in it until the rules kick it out; it kicks down the ramp, so the ball rolls out of the mouth
+    { id: "digSite", at: [422, 215], r: 12, zones: [3], switch: "digSite", hold: { kickDeg: 90, kickSpeed: 0.8 } },
     // the skill shot: three rollovers up the plunger lane, the harder the pull the further the ball gets
     { id: "skill1", at: [499, 700], r: 10, switch: "skill1" },
     { id: "skill2", at: [499, 500], r: 10, switch: "skill2" },
@@ -79,14 +85,19 @@ export const colonyTable: TableDef = {
     { a: [40, 300], b: [100, 300], zoneA: 1, zoneB: 0, switch: "leafExit" },
     { a: [380, 640], b: [440, 640], zoneA: 0, zoneB: 2, switch: "rootEnter" },
     { a: [380, 400], b: [440, 400], zoneA: 2, zoneB: 0, switch: "rootExit" },
+    // the Dig Ramp has a mouth only: its top is the Dig Site
+    { a: [392, 330], b: [452, 330], zoneA: 0, zoneB: 3, switch: "digEnter" },
   ],
   visual: {
-    heights: [0, 48, 48],
+    heights: [0, 48, 48, 56],
     ramps: [
       { zone: 1, path: [[70, 500], [70, 300]], width: 60, heights: [0, 48] },
       { zone: 2, path: [[410, 640], [410, 400]], width: 60, heights: [0, 48] },
+      { zone: 3, path: [[422, 330], [422, 190]], width: 60, heights: [0, 56] },
     ],
   },
+  // the Pull Bridge: over the resting upper flipper, nearer the pivot than the tip so the Brood Chamber does not take the ball; the rules switch it on after a Leaf Ramp shot, so the ball waits there for the Dig Ramp shot
+  magnets: [{ id: "pullBridge", at: [48, 612], r: 40, strength: 4 }],
   plunger: { at: [499, 1030], dirDeg: -90, width: 32, stroke: 80, maxSpeed: 2, pullSpeed: 0.2, material: "plunger" },
   flippers: [
     { id: "left", pivot: [134, 900], length: 70, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -20, upMs: 40, downMs: 100, material: "rubber" },
@@ -95,5 +106,5 @@ export const colonyTable: TableDef = {
     { id: "upperLeft", pivot: [16, 600], length: 58, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber", input: "left" },
   ],
   sounds: { slingL: "sling", slingR: "sling", scout: "target" },
-  shots: { skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"] },
+  shots: { skillShot: ["skill1", "skill2", "skill3"], scout: ["scout"], leafRamp: ["leafEnter", "leafExit"], rootRamp: ["rootEnter", "rootExit"], broodChamber: ["brood"], queensChamber: ["queen"], mushroomHole: ["mushroom"], digRamp: ["digEnter", "digSite"] },
 };
