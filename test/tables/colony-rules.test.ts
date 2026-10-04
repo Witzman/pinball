@@ -153,7 +153,7 @@ describe("the skill shot", () => {
 
   it("has points for every switch of the table except the skill lanes (they pay the skill shot) and the kickback lane", () => {
     const all = [...(colonyTable.triggers ?? []).map((t) => t.switch), ...colonyTable.walls.flatMap((w) => (w.switch ? [w.switch] : [])), ...colonyTable.posts.flatMap((p) => (p.switch ? [p.switch] : [])), ...(colonyTable.gates ?? []).flatMap((g) => (g.switch ? [g.switch] : []))];
-    const paid = all.filter((sw) => !sw.startsWith("skill") && sw !== "kickbackL" && !/^(leaf|root)(Enter|Exit)$/.test(sw) && !Object.hasOwn(CHAMBER_POINTS, sw)).sort(); // the ramps pay for the shot, not for the gates
+    const paid = all.filter((sw) => !sw.startsWith("skill") && sw !== "kickbackL" && !/^(leaf|root)(Enter|Exit)$|^digEnter$/.test(sw) && !Object.hasOwn(CHAMBER_POINTS, sw)).sort(); // the ramps pay for the shot, not for the gates
     expect(Object.keys(SWITCH_POINTS).sort()).toEqual(paid);
     // the placeholders as they are now: a change is deliberate
     expect(SWITCH_POINTS).toEqual({ slingL: 10_000, slingR: 10_000, inL: 25_000, inR: 25_000, outL: 5_000, outR: 5_000, bumper1: 5_000, bumper2: 5_000, bumper3: 5_000, scout: 50_000, rollW: 10_000, rollO: 10_000, rollR: 10_000 });
@@ -239,7 +239,7 @@ describe("the skill shot", () => {
 
 describe("the chambers (step 3b)", () => {
   it("pins the placeholders: what a chamber pays and how long it holds the ball", () => {
-    expect(CHAMBER_POINTS).toEqual({ brood: 100_000, queen: 150_000, mushroom: 100_000 });
+    expect(CHAMBER_POINTS).toEqual({ brood: 100_000, queen: 150_000, mushroom: 100_000, digSite: 200_000 });
     expect(CHAMBER_HOLD).toBe(700);
     for (const p of Object.values(CHAMBER_POINTS)) expect(p).toBeLessThan(SKILL_SHOT);
   });
