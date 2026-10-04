@@ -37,10 +37,10 @@ describe("The Colony, step 1: the outline", () => {
     expect(tableSetups.colony?.flow).toBeDefined();
   });
 
-  it("is the table of the spec: 520 x 1050 mm, 6.5 degrees, a 27 mm ball, a 58 mm flipper pair and the upper flipper, one plunger", () => {
+  it("is the table of the spec: 520 x 1050 mm, 6.5 degrees, a 27 mm ball, a 70 mm flipper pair and the upper flipper, one plunger", () => {
     expect(colonyTable.playfield).toEqual({ width: 520, length: 1050, slopeDeg: 6.5 });
     expect(colonyTable.ball.radius * 2).toBe(27);
-    expect(colonyTable.flippers.map((f) => [f.id, f.length, f.input ?? null])).toEqual([["left", 58, null], ["right", 58, null], ["upperLeft", 58, "left"]]);
+    expect(colonyTable.flippers.map((f) => [f.id, f.length, f.input ?? null])).toEqual([["left", 70, null], ["right", 70, null], ["upperLeft", 58, "left"]]);
     expect(colonyTable.plunger).toBeDefined();
   });
 

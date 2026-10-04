@@ -89,8 +89,8 @@ export const colonyTable: TableDef = {
   },
   plunger: { at: [499, 1030], dirDeg: -90, width: 32, stroke: 80, maxSpeed: 2, pullSpeed: 0.2, material: "plunger" },
   flippers: [
-    { id: "left", pivot: [134, 900], length: 58, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber" },
-    { id: "right", pivot: [354, 900], length: 58, rBase: 9.5, rTip: 5, restDeg: 150, activeDeg: 210, upMs: 40, downMs: 100, material: "rubber" },
+    { id: "left", pivot: [134, 900], length: 70, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -20, upMs: 40, downMs: 100, material: "rubber" },
+    { id: "right", pivot: [354, 900], length: 70, rBase: 9.5, rTip: 5, restDeg: 150, activeDeg: 200, upMs: 40, downMs: 100, material: "rubber" },
     // the upper flipper, on the left wall; it follows the left button
     { id: "upperLeft", pivot: [16, 600], length: 58, rBase: 9.5, rTip: 5, restDeg: 30, activeDeg: -30, upMs: 40, downMs: 100, material: "rubber", input: "left" },
   ],
