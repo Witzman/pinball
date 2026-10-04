@@ -289,8 +289,8 @@ export function studioSky(w = 512, h = 256): HTMLCanvasElement {
   const base = g.createLinearGradient(0, 0, 0, h);
   base.addColorStop(0, "#c4d0ea");
   base.addColorStop(0.45, "#68718c");
-  base.addColorStop(0.5, "#2c3040");
-  base.addColorStop(1, "#14161e");
+  base.addColorStop(0.5, "#4a3626"); // below the horizon is what a ball sees of the table: warm soil, not a blue-grey floor
+  base.addColorStop(1, "#24160c");
   g.fillStyle = base;
   g.fillRect(0, 0, w, h);
   const box = (x: number, y: number, bw: number, bh: number, a: number) => {
