@@ -54,6 +54,8 @@ export interface Game {
   /** A nudge waiting for the next tick, and the tick the last one was applied (-cooldown: none yet). */
   pendingNudge: NudgeDir | null;
   lastNudge: number;
+  /** The way the last felt nudge went, for the view. */
+  lastNudgeDir: NudgeDir;
   /** What the sound layer should hear, since it last took it (`takeAudio`); capped so nobody listening costs nothing. */
   audioOut: AudioEvent[];
   /** Scratch lists reused every tick. */
@@ -96,7 +98,7 @@ export function createGame(def: TableDef, opts: GameOptions = {}): Game {
   const idle = (): GameInput => ({ left: false, right: false, plunge: false, coin: false, start: false, buyin: false });
   const g: Game = {
     table, input: idle(), paused: false, accMs: 0, drains: 0,
-    rules, setup: { def, options: opts }, errors: [], errorCount: 0, errorStreak: 0, calmTicks: 0, broken: null, applied: 0, outbox: [], audioOut: [], pressed: idle(), arrivals: 0, pendingNudge: null, lastNudge: -NUDGE_COOLDOWN, events: [], cmds: [], drained: [],
+    rules, setup: { def, options: opts }, errors: [], errorCount: 0, errorStreak: 0, calmTicks: 0, broken: null, applied: 0, outbox: [], audioOut: [], pressed: idle(), arrivals: 0, pendingNudge: null, lastNudge: -NUDGE_COOLDOWN, lastNudgeDir: "up", events: [], cmds: [], drained: [],
   };
   if (!opts.flow) {
     // free play: a ball waits on the plunger. With a flow the first ball comes when a game starts.
@@ -245,6 +247,7 @@ export function tick(g: Game): void {
     const [dvx, dvy] = NUDGES[g.pendingNudge];
     if (shove(w, dvx, dvy) > 0) {
       nudged = g.pendingNudge;
+      g.lastNudgeDir = g.pendingNudge;
       g.lastNudge = w.tick; // a shove nobody felt does not start the cooldown
     }
     g.pendingNudge = null;

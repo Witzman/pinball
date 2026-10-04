@@ -49,6 +49,8 @@ export interface Snapshot {
   magnets: { x: number; y: number; r: number; on: boolean }[];
   /** Drop targets, 1 = down, by `StaticScene.walls[].drop - 1`; empty without drop targets. */
   down: number[];
+  /** The last nudge that was felt: which way, and how many milliseconds ago; null until one happened. For the shake of the view. */
+  nudge: { dir: "left" | "right" | "up"; ago: number } | null;
   lamps: Record<string, LitState>;
   /** The text the player reads, and what it depends on; built by the app from the rules state. */
   hud: { lines: string[]; tilted: boolean; phase: string };
@@ -126,6 +128,7 @@ export function snapshot(g: Game, hudLines: readonly string[] = [], cameraMode: 
     plunger: p ? { x: p.x, y: p.y, dirx: p.dirx, diry: p.diry, halfWidth: p.halfWidth, pos: p.pos } : null,
     magnets: w.magnets.map((m) => ({ x: m.x, y: m.y, r: m.r, on: m.on })),
     down: Array.from(w.down),
+    nudge: g.lastNudge < 0 ? null : { dir: g.lastNudgeDir, ago: w.tick - g.lastNudge },
     lamps: { ...g.rules.state.lamps },
     hud: { lines: [...hudLines], tilted: game?.tilted === true, phase: game?.phase ?? "" },
     hits: events.flatMap((e) => (e.a === "switch" ? [{ sw: e.sw, s: e.s, kick: e.kind === "kick" }] : [])),

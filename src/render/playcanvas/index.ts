@@ -189,6 +189,8 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
   const insertMaterial = (rgb: [number, number, number], level: number): pc.StandardMaterial => material({ diffuse: [rgb[0] * 0.15, rgb[1] * 0.15, rgb[2] * 0.15], emissive: rgb, emissiveIntensity: level * 1.6, metal: 0, gloss: 0.9 });
   /** What colour an insert is, by the name of its lamp: the lanes of the skill shot green, rollovers yellow, lanes orange, the kickback red. */
   const insertColor = (id: string): [number, number, number] => (id.startsWith("skill") ? [0.2, 1, 0.35] : id.startsWith("roll") ? [1, 0.9, 0.2] : id.startsWith("kick") ? [1, 0.2, 0.15] : [1, 0.55, 0.12]);
+  const SHAKE_MS = 450;
+  const SHAKE_CM = 1.2;
   const LAMP_LEVEL = { off: 0.25, lit: 1.2, flash: 1.2, collected: 0.5 } as const;
 
   let flipperEntities: pc.Entity[][] = [];
@@ -453,8 +455,17 @@ export function createPlayCanvasRenderer(opts: PlayCanvasOptions): Renderer {
     const wantZ = b ? Math.max(-1, Math.min(1, Z(b.y) / ((sceneL * S) / 2))) * 7 : 0;
     focusX += (wantX - focusX) * 0.06;
     focusZ += (wantZ - focusZ) * 0.06;
-    camera.setPosition(focusX, Math.cos(pitch) * distance, Math.sin(pitch) * distance + focusZ);
-    camera.lookAt(focusX, 0, focusZ);
+    // a nudge shakes the view: a quick damped swing along the shove, gone in about half a second
+    let shakeX = 0;
+    let shakeZ = 0;
+    if (snap.nudge !== null && snap.nudge.ago < SHAKE_MS) {
+      const t = snap.nudge.ago / SHAKE_MS;
+      const swing = Math.sin(t * Math.PI * 6) * (1 - t) ** 2 * SHAKE_CM;
+      if (snap.nudge.dir === "up") shakeZ = -swing;
+      else shakeX = snap.nudge.dir === "left" ? -swing : swing;
+    }
+    camera.setPosition(focusX + shakeX, Math.cos(pitch) * distance, Math.sin(pitch) * distance + focusZ + shakeZ);
+    camera.lookAt(focusX + shakeX, 0, focusZ + shakeZ);
   }
 
   app.start();
